@@ -77,6 +77,7 @@ function normalizeUser(u) {
     completedGoalHours: u.completedGoalHours !== undefined ? u.completedGoalHours : 14.5,
     incomingCallsEnabled: u.incomingCallsEnabled !== undefined ? u.incomingCallsEnabled : true,
     friendsOnly: u.friendsOnly !== undefined ? u.friendsOnly : false,
+    isBanned: u.isBanned !== undefined ? u.isBanned : false,
     coverPhoto: u.coverPhoto || '/theme-bg.jpg'
   };
 }
@@ -260,6 +261,16 @@ const db = {
       };
       scheduleDiskFlush();
       return memoryDb.roomMessages[index];
+    }
+    return null;
+  },
+
+  deleteUser: (userId) => {
+    const index = memoryDb.users.findIndex(u => u.id === userId);
+    if (index !== -1) {
+      const removed = memoryDb.users.splice(index, 1)[0];
+      scheduleDiskFlush();
+      return removed;
     }
     return null;
   },

@@ -7,16 +7,23 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const db = require('./db');
 
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration
+// CORS configuration & Tunnel bypass
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
+
+app.use((req, res, next) => {
+  res.setHeader('Bypass-Tunnel-Reminder', 'true');
+  res.setHeader('ngrok-skip-browser-warning', 'true');
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -67,15 +74,28 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Helper middleware for Admin validation
+// Helper middleware for Admin validation (PIN / Secret Header / Admin User)
 function authenticateAdmin(req, res, next) {
-  authenticateToken(req, res, () => {
-    if (req.user && req.user.username === 'admin') {
-      next();
-    } else {
-      res.status(403).json({ error: 'Admin access required' });
-    }
-  });
+  const adminKey = req.headers['x-admin-key'] || req.headers['x-admin-pin'] || req.query.adminKey;
+  if (adminKey === '8009' || adminKey === 'admin8009' || adminKey === 'admin@123') {
+    req.isAdmin = true;
+    return next();
+  }
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (!err && user && (user.username === 'admin' || user.isAdmin)) {
+        req.user = user;
+        req.isAdmin = true;
+        return next();
+      }
+      return res.status(403).json({ error: 'Master Admin Access Required' });
+    });
+  } else {
+    return res.status(401).json({ error: 'Master Admin PIN or Security Key Required' });
+  }
 }
 
 // --- AUTHENTICATION ROUTES ---
@@ -185,6 +205,10 @@ app.post('/api/auth/login', (req, res) => {
   if (!isMatch) {
     return res.status(400).json({ error: 'Invalid username or password' });
   }
+
+  if (user.isBanned) {
+    return res.status(403).json({ error: 'Your account has been suspended by administration. Please contact support.' });
+  }
   
   const tokenUser = { id: user.id, username: user.username };
   const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '7d' });
@@ -194,6 +218,8 @@ app.post('/api/auth/login', (req, res) => {
     user: {
       id: user.id,
       username: user.username,
+      mobile: user.mobile,
+      email: user.email,
       interests: user.interests,
       bio: user.bio,
       avatar: user.avatar,
@@ -206,6 +232,45 @@ app.post('/api/auth/login', (req, res) => {
       referralPoints: user.referralPoints,
       verificationStatus: user.verificationStatus
     }
+  });
+});
+
+// One-Click Instant Guest / Web Demo Login (for Chrome & Browser visitors)
+app.post('/api/auth/guest-login', (req, res) => {
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const guestUsername = `Guest_${randomSuffix}`;
+  const guestId = `guest_${Date.now()}_${randomSuffix}`;
+  const guestPassword = bcrypt.hashSync(`guest_${randomSuffix}`, 10);
+  
+  const guestUser = {
+    id: guestId,
+    username: guestUsername,
+    password: guestPassword,
+    mobile: '',
+    email: '',
+    interests: ['Chat', 'Music'],
+    bio: 'Guest visitor exploring Ajnabi Dil ✨',
+    avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${guestUsername}`,
+    coins: 100,
+    callRate: 10,
+    voiceCallRate: 10,
+    videoCallRate: 20,
+    isPartner: false,
+    partnerId: null,
+    earnings: 0,
+    referralCode: `REF_${randomSuffix}`,
+    referralPoints: 0,
+    verificationStatus: 'none',
+    verificationDetails: null
+  };
+
+  db.saveUser(guestUser);
+  const token = jwt.sign({ id: guestUser.id, username: guestUser.username }, JWT_SECRET, { expiresIn: '7d' });
+
+  res.json({
+    token,
+    user: guestUser,
+    message: 'Logged in as Guest user'
   });
 });
 
@@ -575,20 +640,38 @@ app.get('/api/admin/data', authenticateAdmin, (req, res) => {
     const allUsers = db.getUsers().map(u => ({
       id: u.id,
       username: u.username,
-      interests: u.interests,
-      bio: u.bio,
-      avatar: u.avatar,
-      coins: u.coins,
-      callRate: u.callRate,
-      isAdmin: u.isAdmin || false
+      mobile: u.mobile || '',
+      email: u.email || '',
+      interests: u.interests || [],
+      bio: u.bio || '',
+      avatar: u.avatar || '',
+      coins: u.coins !== undefined ? u.coins : 100,
+      callRate: u.callRate || 10,
+      voiceCallRate: u.voiceCallRate || 10,
+      videoCallRate: u.videoCallRate || 20,
+      isPartner: u.isPartner || false,
+      partnerId: u.partnerId || null,
+      earnings: u.earnings || 0,
+      referralCode: u.referralCode || '',
+      referralPoints: u.referralPoints || 0,
+      isBanned: u.isBanned || false,
+      isAdmin: u.isAdmin || false,
+      verificationStatus: u.verificationStatus || 'none',
+      verificationDetails: u.verificationDetails || null
     }));
     
     const allRooms = db.getRooms();
     
     // Read raw data for DMs and room messages
-    const dbData = JSON.parse(fs.readFileSync(path.join(__dirname, 'db.json'), 'utf-8'));
-    const allDMs = dbData.messages || [];
-    const allRoomMessages = dbData.roomMessages || [];
+    let allDMs = [];
+    let allRoomMessages = [];
+    try {
+      const dbData = JSON.parse(fs.readFileSync(path.join(__dirname, 'db.json'), 'utf-8'));
+      allDMs = dbData.messages || [];
+      allRoomMessages = dbData.roomMessages || [];
+    } catch (e) {
+      // Fallback to empty if reading raw JSON fails
+    }
     
     const recharges = db.getRechargeRequests();
     const withdrawals = db.getWithdrawalRequests();
@@ -601,11 +684,46 @@ app.get('/api/admin/data', authenticateAdmin, (req, res) => {
       roomMessages: allRoomMessages,
       recharges,
       withdrawals,
-      adminSettings
+      adminSettings,
+      activeLiveStreamsCount: liveStreams.size,
+      onlineUsersCount: onlineUsers.size
     });
   } catch (err) {
     console.error("Admin data fetch error:", err);
     res.status(500).json({ error: 'Failed to retrieve admin details' });
+  }
+});
+
+// Admin User Management: Update user coins, partner status, ban status
+app.post('/api/admin/users/update', authenticateAdmin, (req, res) => {
+  const { userId, coins, isBanned, isPartner, earnings } = req.body;
+  if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+  const user = db.getUserById(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (coins !== undefined) user.coins = Number(coins);
+  if (earnings !== undefined) user.earnings = Number(earnings);
+  if (isBanned !== undefined) user.isBanned = Boolean(isBanned);
+  if (isPartner !== undefined) {
+    user.isPartner = Boolean(isPartner);
+    if (user.isPartner && !user.partnerId) {
+      user.partnerId = 'PT_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+    }
+  }
+
+  db.saveUser(user);
+  res.json({ success: true, user });
+});
+
+// Admin User Management: Delete user account
+app.delete('/api/admin/users/:userId', authenticateAdmin, (req, res) => {
+  const { userId } = req.params;
+  const deleted = db.deleteUser(userId);
+  if (deleted) {
+    res.json({ success: true, message: 'User deleted successfully' });
+  } else {
+    res.status(404).json({ error: 'User not found' });
   }
 });
 
@@ -1337,9 +1455,89 @@ io.on('connection', (socket) => {
   });
 });
 
+// Dynamic Local IP Detection Helper
+function getLocalIpAddress() {
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal && iface.address !== '127.0.0.1') {
+          return iface.address;
+        }
+      }
+    }
+  } catch (e) {}
+  return '172.20.10.2';
+}
+
+const activeLocalIp = getLocalIpAddress();
+
+// App & APK Download Endpoints for Direct Chrome / Browser Downloads
+const handleApkDownload = (req, res) => {
+  const candidatePaths = [
+    path.join(__dirname, '../AjnabiDil_Latest.apk'),
+    path.join(__dirname, '../frontend/dist/AjnabiDil_Latest.apk'),
+    path.join(__dirname, '../frontend/public/AjnabiDil_Latest.apk'),
+    path.join(__dirname, '../AjnabiDil_Trial.apk')
+  ];
+
+  let apkPath = null;
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      apkPath = p;
+      break;
+    }
+  }
+
+  if (apkPath) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="AjnabiDil_Latest.apk"');
+    res.sendFile(path.resolve(apkPath));
+  } else {
+    res.status(404).send('Ajnabi Dil APK is currently preparing. Please try again in a moment.');
+  }
+};
+
+app.get('/download-apk', handleApkDownload);
+app.get('/download/apk', handleApkDownload);
+app.get('/AjnabiDil_Latest.apk', handleApkDownload);
+app.get('/AjnabiDil.apk', handleApkDownload);
+
+app.get('/api/app/info', (req, res) => {
+  const serverBase = liveTunnelUrl || `http://${activeLocalIp}:${PORT}`;
+  res.json({
+    appName: 'Ajnabi Dil',
+    version: '2.5.0',
+    tagline: 'Dil Se Dil Ka Connection 💖',
+    apkDownloadUrl: `${serverBase}/download-apk`,
+    webAppUrl: `${serverBase}/`,
+    downloadPageUrl: `${serverBase}/#/download`,
+    releaseDate: '2026-09-02',
+    apkSize: '731 KB'
+  });
+});
+
+let liveTunnelUrl = '';
+
+// Live Tunnel Info Endpoint for public sharing
+app.get('/api/tunnel/info', (req, res) => {
+  const lanUrl = `http://${activeLocalIp}:${PORT}`;
+  const localUrl = `http://localhost:${PORT}`;
+  const preferredUrl = liveTunnelUrl || lanUrl;
+
+  res.json({
+    tunnelUrl: liveTunnelUrl,
+    lanUrl: lanUrl,
+    localUrl: localUrl,
+    preferredUrl: preferredUrl,
+    apkDownloadUrl: `${preferredUrl}/download-apk`,
+    webAppUrl: `${preferredUrl}/#/download`
+  });
+});
+
 // SPA wildcard fallback for Chrome and Web Browser navigation
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/socket.io')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/socket.io') || req.path.endsWith('.apk')) {
     return next();
   }
   const indexHtml = path.join(FRONTEND_DIST, 'index.html');
@@ -1350,6 +1548,40 @@ app.get('*', (req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Ajnabi Dil server running on port ${PORT}`);
+
+// Setup resilient tunnel
+async function setupPublicTunnel(port) {
+  try {
+    const localtunnel = require('localtunnel');
+    const tunnel = await localtunnel({ port: port });
+    liveTunnelUrl = tunnel.url;
+    console.log(`🌐 WORLDWIDE PUBLIC LIVE LINK : ${tunnel.url}`);
+    console.log(`📥 PUBLIC APK DOWNLOAD LINK  : ${tunnel.url}/download-apk`);
+    console.log(`📱 PUBLIC SHARE/DOWNLOAD PAGE: ${tunnel.url}/#/download`);
+    console.log(`======================================================\n`);
+
+    tunnel.on('close', () => {
+      console.log('Tunnel closed. Reconnecting in 5 seconds...');
+      liveTunnelUrl = '';
+      setTimeout(() => setupPublicTunnel(port), 5000);
+    });
+
+    tunnel.on('error', (err) => {
+      console.log('Tunnel error:', err.message);
+      liveTunnelUrl = '';
+    });
+  } catch (err) {
+    console.log('Public tunnel note:', err.message);
+    console.log(`======================================================\n`);
+  }
+}
+
+server.listen(PORT, '0.0.0.0', async () => {
+  console.log(`\n======================================================`);
+  console.log(`🚀 Ajnabi Dil Local Server: http://localhost:${PORT}`);
+  console.log(`📱 LAN Mobile Network IP   : http://${activeLocalIp}:${PORT}`);
+  console.log(`📲 Direct APK Download     : http://${activeLocalIp}:${PORT}/download-apk`);
+  console.log(`✨ Web App / Download Page : http://${activeLocalIp}:${PORT}/#/download`);
+  
+  await setupPublicTunnel(PORT);
 });

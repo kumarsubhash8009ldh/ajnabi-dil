@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { MessageCircle, Lock, User, AlertCircle, ArrowLeft, Gift, Phone, Sparkles, Check, Send, Award, DollarSign } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Lock, User, AlertCircle, ArrowLeft, Gift, Phone, Sparkles, Send, Download, Globe, Check } from 'lucide-react';
 import { apiRequest, setSession } from '../utils/api';
 
 export default function Register() {
@@ -11,8 +11,28 @@ export default function Register() {
   const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [welcomeModal, setWelcomeModal] = useState(null); // { user, welcomeMessage }
+  const [welcomeModal, setWelcomeModal] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Auto-detect referral code from query params (works for both standard and hash routing)
+  useEffect(() => {
+    let refCode = '';
+    // Check search params from URL
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('ref')) {
+      refCode = searchParams.get('ref');
+    } else if (window.location.hash.includes('?')) {
+      const hashQuery = window.location.hash.split('?')[1];
+      const hashParams = new URLSearchParams(hashQuery);
+      if (hashParams.get('ref')) {
+        refCode = hashParams.get('ref');
+      }
+    }
+    if (refCode) {
+      setReferralCode(refCode.toUpperCase());
+    }
+  }, [location]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -36,7 +56,7 @@ export default function Register() {
     
     try {
       const response = await apiRequest('/api/auth/register', 'POST', { 
-        username, 
+        username: username.trim(), 
         password, 
         mobile: mobile.trim(), 
         referralCode: referralCode.trim() 
@@ -44,7 +64,6 @@ export default function Register() {
 
       setSession(response.token, response.user);
       
-      // Open Welcome Income Notification Modal
       setWelcomeModal({
         user: response.user,
         welcomeMessage: response.welcomeMessage || 'Welcome to Ajnabi Dil!'
@@ -58,7 +77,7 @@ export default function Register() {
 
   const handleForwardToWhatsApp = () => {
     const cleanPhone = (mobile || '').replace(/[^0-9]/g, '');
-    const incomeDetailsText = `🎉 *Welcome to Ajnabi Dil Earning Partner Program!* \n\nHello @${username},\nAapka account successfully register ho gaya hai!\n\n💰 *Aapki Income & Earning Rates:* \n• 📞 *Voice Calls:* 1 Coin/sec (Earn 70% Share)\n• 📹 *Video Calls:* 20 Coins/10s (Earn 70% Share)\n• 🔒 *Live Private Shows:* Min 300 Coins (70% Host Share)\n• 🎁 *Virtual Live Gifts:* 70% Direct Host Commission\n• 💸 *Minimum Withdrawal:* Rs. 500 (500 Coins) via instant UPI/Bank transfer\n\nApni profile par jakar *Host KYC Verification* complete karein aur earning start karein!\nApp Link: http://localhost:3000`;
+    const incomeDetailsText = `🎉 *Welcome to Ajnabi Dil Earning Partner Program!* \n\nHello @${username},\nAapka account successfully register ho gaya hai!\n\n💰 *Aapki Income & Earning Rates:* \n• 📞 *Voice Calls:* 1 Coin/sec (Earn 70% Share)\n• 📹 *Video Calls:* 20 Coins/10s (Earn 70% Share)\n• 🔒 *Live Private Shows:* Min 300 Coins (70% Host Share)\n• 🎁 *Virtual Live Gifts:* 70% Direct Host Commission\n• 💸 *Minimum Withdrawal:* Rs. 500 (500 Coins) via instant UPI/Bank transfer\n\nApni profile par jakar *Host KYC Verification* complete karein aur earning start karein!\nApp Link: ${window.location.origin}`;
     
     const url = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(incomeDetailsText)}`;
     window.open(url, '_blank');
@@ -69,186 +88,207 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-0 md:p-4">
-      <div className="w-full md:w-[410px] h-screen md:h-[840px] md:max-h-[90vh] bg-white flex flex-col shadow-2xl md:rounded-[40px] md:border-[10px] md:border-slate-800 overflow-hidden relative justify-center px-8">
+    <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-0 md:p-4">
+      {/* Smartphone Outer Container */}
+      <div className="w-full md:w-[420px] h-screen md:h-[860px] md:max-h-[92vh] bg-gradient-to-b from-slate-950 via-slate-900 to-black flex flex-col shadow-2xl md:rounded-[40px] md:border-[8px] md:border-slate-800 overflow-hidden relative justify-between p-6 text-white">
         
-        <Link to="/login" className="absolute top-8 left-8 text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm font-semibold">
-          <ArrowLeft size={18} />
-          <span>Back</span>
-        </Link>
+        {/* Top Header */}
+        <div className="flex justify-between items-center z-10 pt-2">
+          <Link to="/login" className="text-slate-400 hover:text-white flex items-center gap-1 text-xs font-bold bg-white/5 px-3 py-1 rounded-full">
+            <ArrowLeft size={14} />
+            <span>Login</span>
+          </Link>
 
-        <div className="text-center mb-3">
+          <a
+            href="/download-apk"
+            download="AjnabiDil_Latest.apk"
+            className="flex items-center gap-1 text-[11px] text-amber-300 font-extrabold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 px-3 py-1 rounded-full transition-all"
+          >
+            <Download size={13} />
+            <span>Get APK</span>
+          </a>
+        </div>
+
+        {/* Brand & Heading */}
+        <div className="my-auto z-10 flex flex-col items-center">
           <img 
             src="/logo.jpg" 
             alt="Ajnabi Dil Logo" 
-            className="mx-auto w-16 h-16 rounded-full object-cover mb-2 shadow-lg border-2 border-pink-400 ring-2 ring-pink-300/30"
+            className="w-16 h-16 rounded-full object-cover shadow-xl border-2 border-pink-400/80 ring-2 ring-pink-500/20 mx-auto mb-1.5"
           />
-          <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Create Account</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Register & start earning on Ajnabi Dil</p>
-        </div>
+          <h2 className="text-xl font-black tracking-tight bg-gradient-to-r from-pink-200 via-rose-300 to-white bg-clip-text text-transparent">
+            Create Account
+          </h2>
+          <p className="text-[11px] text-slate-400">
+            Register & connect on Ajnabi Dil 💖
+          </p>
 
-        {error && (
-          <div className="bg-red-50 text-red-600 text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 mb-3 border border-red-100">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleRegister} className="flex flex-col gap-2.5">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Username</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <User size={16} />
-              </span>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Choose username"
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors text-xs font-medium"
-              />
+          {error && (
+            <div className="w-full bg-red-950/60 border border-red-500/40 text-red-300 text-xs px-3 py-2 rounded-2xl flex items-center gap-2 mt-2.5 text-left">
+              <AlertCircle size={15} className="shrink-0 text-red-400" />
+              <span className="flex-1 text-[11px]">{error}</span>
             </div>
-          </div>
+          )}
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Mobile / WhatsApp Number</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <Phone size={16} />
-              </span>
-              <input
-                type="tel"
-                required
-                value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                placeholder="e.g. 9876543210 (For income details)"
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors text-xs font-medium font-mono"
-              />
+          <form onSubmit={handleRegister} className="w-full flex flex-col gap-2 mt-3">
+            <div className="flex flex-col gap-0.5 text-left">
+              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider pl-1">Username</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <User size={15} />
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Choose username"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs font-medium outline-none"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Password</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <Lock size={16} />
-              </span>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create password"
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors text-xs font-medium"
-              />
+            <div className="flex flex-col gap-0.5 text-left">
+              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider pl-1">Mobile / WhatsApp Number</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <Phone size={15} />
+                </span>
+                <input
+                  type="tel"
+                  required
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  placeholder="10-digit number (e.g. 9876543210)"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs font-mono outline-none"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Confirm Password</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <Lock size={16} />
-              </span>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm password"
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors text-xs font-medium"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-0.5 text-left">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider pl-1">Password</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
+                    <Lock size={14} />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password"
+                    className="w-full pl-8 pr-2 py-2 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-0.5 text-left">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider pl-1">Confirm</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
+                    <Lock size={14} />
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat"
+                    className="w-full pl-8 pr-2 py-2 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs outline-none"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Referral Code (Optional)</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                <Gift size={16} />
-              </span>
+            <div className="flex flex-col gap-0.5 text-left">
+              <label className="text-[9px] font-bold text-amber-400 uppercase tracking-wider pl-1 flex items-center gap-1">
+                <Gift size={11} />
+                <span>Referral Code (Optional)</span>
+              </label>
               <input
                 type="text"
                 value={referralCode}
                 onChange={(e) => setReferralCode(e.target.value)}
                 placeholder="Invite code for +50 free coins"
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors text-xs font-semibold uppercase"
+                className="w-full px-3 py-2 bg-slate-900/80 border border-amber-500/40 focus:border-amber-400 rounded-xl text-amber-300 placeholder-slate-500 text-xs font-bold uppercase outline-none"
               />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 mt-2 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-primary-200 transition-all active:scale-[0.98] disabled:opacity-50"
-          >
-            {loading ? 'Creating Account...' : 'Register & View Income Details'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 mt-2 bg-gradient-to-r from-pink-600 via-rose-500 to-pink-600 hover:from-pink-500 hover:to-rose-400 text-white rounded-2xl font-black text-xs shadow-lg shadow-pink-600/30 transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? 'Creating Account...' : 'Register & Start Earning'}
+            </button>
+          </form>
+        </div>
 
-        <p className="text-center text-xs text-slate-500 mt-4">
-          Already have an account?{' '}
-          <Link to="/login" className="text-primary-600 font-bold hover:underline">
-            Log in here
-          </Link>
-        </p>
+        {/* Footer */}
+        <div className="text-center z-10 pt-2 border-t border-white/5">
+          <p className="text-xs text-slate-400">
+            Already have an account?{' '}
+            <Link to="/login" className="text-pink-400 font-black hover:underline ml-1">
+              Log In
+            </Link>
+          </p>
+        </div>
 
-        {/* 🎉 WELCOME INCOME & EARNING DETAILS MODAL */}
+        {/* Welcome Income Modal */}
         {welcomeModal && (
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-5 shadow-2xl w-full max-w-sm flex flex-col gap-3.5 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl p-5 shadow-2xl w-full max-w-sm flex flex-col gap-3.5 border border-pink-500/30 text-white">
               
               <div className="text-center">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-primary-600 flex items-center justify-center text-white mx-auto shadow-md mb-2">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-rose-600 flex items-center justify-center text-white mx-auto shadow-md mb-2">
                   <Sparkles size={24} />
                 </div>
-                <h3 className="font-extrabold text-base text-slate-800">Welcome @{welcomeModal.user.username}!</h3>
+                <h3 className="font-extrabold text-base text-white">Welcome @{welcomeModal.user.username}!</h3>
                 <p className="text-[10px] text-slate-400 mt-0.5">Your Account & Income Potential Guide</p>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2">
-                <span className="text-[9px] uppercase font-extrabold tracking-wider text-emerald-600">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 flex flex-col gap-2 text-xs">
+                <span className="text-[9px] uppercase font-extrabold tracking-wider text-emerald-400">
                   💰 Host Earning Rates (70% Revenue Share):
                 </span>
                 
-                <div className="flex justify-between items-center text-xs border-b border-slate-200/60 pb-1.5 text-slate-700 font-semibold">
-                  <span>📞 Voice Calling Rate:</span>
-                  <span className="font-extrabold text-emerald-600">1 Coin/sec (70% Share)</span>
+                <div className="flex justify-between items-center border-b border-slate-800 pb-1.5 text-slate-300">
+                  <span>📞 Voice Calling:</span>
+                  <span className="font-extrabold text-emerald-400">1 Coin/sec (70% Share)</span>
                 </div>
 
-                <div className="flex justify-between items-center text-xs border-b border-slate-200/60 pb-1.5 text-slate-700 font-semibold">
-                  <span>📹 Video Calling Rate:</span>
-                  <span className="font-extrabold text-purple-600">20 Coins/10s (70% Share)</span>
+                <div className="flex justify-between items-center border-b border-slate-800 pb-1.5 text-slate-300">
+                  <span>📹 Video Calling:</span>
+                  <span className="font-extrabold text-pink-400">20 Coins/10s (70% Share)</span>
                 </div>
 
-                <div className="flex justify-between items-center text-xs border-b border-slate-200/60 pb-1.5 text-slate-700 font-semibold">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-1.5 text-slate-300">
                   <span>🔒 Live Private Shows:</span>
-                  <span className="font-extrabold text-yellow-600">Min 300 Coins</span>
+                  <span className="font-extrabold text-amber-400">Min 300 Coins</span>
                 </div>
 
-                <div className="flex justify-between items-center text-xs text-slate-700 font-semibold">
+                <div className="flex justify-between items-center text-slate-300">
                   <span>💸 Bank/UPI Withdrawal:</span>
-                  <span className="font-extrabold text-primary-600">Min Rs. 500 (500c)</span>
+                  <span className="font-extrabold text-emerald-400">Min Rs. 500</span>
                 </div>
               </div>
 
               {/* Direct Forward to WhatsApp Button */}
               <button
                 onClick={handleForwardToWhatsApp}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-extrabold text-xs shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
-                <Send size={15} />
+                <Send size={14} />
                 <span>Forward Income Details to My WhatsApp</span>
               </button>
 
-              {/* Continue to Profile / App Button */}
+              {/* Continue to Profile */}
               <button
                 onClick={handleProceedToApp}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs active:scale-95 transition-all"
+                className="w-full py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold text-xs active:scale-95 transition-all"
               >
-                Continue to Profile & Complete KYC ➔
+                Continue to App & Profile ➔
               </button>
             </div>
           </div>

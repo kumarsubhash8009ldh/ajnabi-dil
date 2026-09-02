@@ -1,27 +1,51 @@
-﻿import React, { useState } from 'react';
-import { Share2, Copy, Check, X, MessageCircle, Download, Smartphone, Sparkles, Send } from 'lucide-react';
-import { getStoredUser } from '../utils/api';
+import React, { useState, useEffect } from 'react';
+import { Share2, Copy, Check, X, MessageCircle, Download, Smartphone, Sparkles, Send, Globe } from 'lucide-react';
+import { getStoredUser, apiRequest } from '../utils/api';
 
 export default function ShareAppModal({ isOpen, onClose }) {
   const [copied, setCopied] = useState(false);
+  const [livePublicHost, setLivePublicHost] = useState('');
   const user = getStoredUser();
   const referralCode = user?.referralCode || user?.username?.toUpperCase() || 'AJNABIDIL';
 
+  useEffect(() => {
+    if (isOpen) {
+      apiRequest('/api/tunnel/info')
+        .then((res) => {
+          if (res && res.tunnelUrl) {
+            setLivePublicHost(res.tunnelUrl);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  // Generate dynamic share URL based on current host/browser
-  const getAppShareUrl = () => {
+  // Generate reachable share URL based on current host/server
+  const getReachableHost = () => {
+    if (livePublicHost) return livePublicHost.replace(/\/+$/, '');
+
     if (typeof window !== 'undefined') {
+      const custom = localStorage.getItem('chitchat_custom_api');
+      if (custom) return custom.replace(/\/+$/, '');
+
       const origin = window.location.origin;
-      const pathname = window.location.pathname;
-      return `${origin}${pathname}#/register?ref=${referralCode}`;
+      // If inside Android APK or on internal WebView domain, use server IP
+      if (origin.includes('androidplatform.net') || origin.includes('localhost')) {
+        return 'http://172.20.10.2:5000';
+      }
+      return origin;
     }
-    return `https://ajnabidil.app/#/register?ref=${referralCode}`;
+    return 'http://172.20.10.2:5000';
   };
 
-  const shareUrl = getAppShareUrl();
+  const serverHost = getReachableHost();
+  const shareUrl = `${serverHost}/#/download?ref=${referralCode}`;
+  const apkDownloadUrl = `${serverHost}/download-apk`;
+
   const shareTitle = "💖 Ajnabi Dil - Real Voice & Video Dating App";
-  const shareMessage = `💖 *Ajnabi Dil App - Free Voice & Video Dating!* 💖\n\nDirect real-time 1-on-1 audio/video calling, live streams, voice chat rooms and fun dating!\n\n🎁 Register with my referral code: *${referralCode}* to get FREE bonus coins!\n\n👉 *Join directly on Chrome/Browser & App here:* \n${shareUrl}`;
+  const shareMessage = `💖 *Ajnabi Dil (अजनबी दिल) - Free Voice & Video Dating!* 💖\n\nDirect real-time 1-on-1 audio/video calling, live streams, voice chat rooms & dating!\n\n👉 *Click to Download APK & Play on Web:*\n${shareUrl}\n\n📥 *Direct Android APK Download:*\n${apkDownloadUrl}\n\n🎁 *Referral Bonus Code:* *${referralCode}* (+50 Free Coins!)`;
 
   const handleCopyLink = () => {
     if (navigator.clipboard) {
@@ -106,7 +130,7 @@ export default function ShareAppModal({ isOpen, onClose }) {
         </div>
 
         {/* Quick Share Buttons */}
-        <div className="space-y-2.5 mb-5">
+        <div className="space-y-2.5 mb-4">
           {/* WhatsApp Direct */}
           <button
             onClick={handleWhatsAppShare}
@@ -120,19 +144,29 @@ export default function ShareAppModal({ isOpen, onClose }) {
           {typeof navigator !== 'undefined' && navigator.share && (
             <button
               onClick={handleNativeShare}
-              className="w-full py-3 px-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 font-bold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-pink-600/20 active:scale-98 transition-all"
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-pink-600/20 active:scale-98 transition-all"
             >
-              <Share2 size={18} />
+              <Share2 size={16} />
               <span>Share via Other Apps</span>
             </button>
           )}
 
+          {/* Direct Download Android APK Button */}
+          <a
+            href="/download-apk"
+            download="AjnabiDil_Latest.apk"
+            className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-extrabold text-xs rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20 active:scale-98 transition-all text-center"
+          >
+            <Download size={16} />
+            <span>Download Android APK (Direct)</span>
+          </a>
+
           {/* Telegram / Social Share */}
           <button
             onClick={handleTelegramShare}
-            className="w-full py-2.5 px-4 bg-sky-600/80 hover:bg-sky-500 font-semibold text-xs rounded-2xl flex items-center justify-center gap-2 border border-sky-400/30 transition-all"
+            className="w-full py-2 px-4 bg-sky-600/80 hover:bg-sky-500 font-semibold text-xs rounded-2xl flex items-center justify-center gap-2 border border-sky-400/30 transition-all"
           >
-            <Send size={16} />
+            <Send size={15} />
             <span>Share on Telegram / Messages</span>
           </button>
         </div>
@@ -155,13 +189,13 @@ export default function ShareAppModal({ isOpen, onClose }) {
         </div>
 
         {/* Web Chrome & APK Access Note */}
-        <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-center gap-4 text-[11px] text-slate-400">
-          <span className="flex items-center gap-1">
-            <Smartphone size={13} className="text-pink-400" /> Mobile APK
+        <div className="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-center gap-4 text-[11px] text-slate-400">
+          <span className="flex items-center gap-1 text-pink-300 font-medium">
+            <Smartphone size={13} className="text-pink-400" /> Android APK
           </span>
           <span>•</span>
-          <span className="flex items-center gap-1">
-            <span className="text-amber-400">🌐</span> Chrome & Web
+          <span className="flex items-center gap-1 text-amber-300 font-medium">
+            <span>🌐</span> Chrome & Web Browser
           </span>
         </div>
       </div>

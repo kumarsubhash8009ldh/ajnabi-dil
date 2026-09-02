@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, Sparkles, Wifi, WifiOff, Plus, Heart, X, 
   Play, Loader2, Camera, Phone, Video, Award, Radio, Check, 
-  Volume2, ShieldCheck, UserCheck, Flame, Zap
+  Volume2, ShieldCheck, UserCheck, Flame, Zap, Share2, Gift
 } from 'lucide-react';
 import { apiRequest, getSocket, getStoredUser, initSocket, setSession } from '../utils/api';
 import MobileLayout from '../components/MobileLayout';
 import BeautyCameraModal from '../components/BeautyCameraModal';
 import CallScreen from '../components/CallScreen';
+import ShareAppModal from '../components/ShareAppModal';
 
 export default function Feed() {
   const [users, setUsers] = useState([]);
@@ -16,6 +17,7 @@ export default function Feed() {
   const [userCoins, setUserCoins] = useState(100);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showShareModal, setShowShareModal] = useState(false);
   
   // Calling Directory Filter: 'all', 'partners', 'video', 'audio'
   const [callingFilter, setCallingFilter] = useState('all');
@@ -50,15 +52,16 @@ export default function Feed() {
         setUserCoins(profile.coins !== undefined ? profile.coins : 100);
       }
       
-      // Fetch users
+      // Fetch users safely
       const usersData = await apiRequest('/api/users');
-      setUsers(usersData);
+      setUsers(Array.isArray(usersData) ? usersData : []);
 
-      // Fetch stories
+      // Fetch stories safely
       const storiesData = await apiRequest('/api/stories');
-      setStories(storiesData);
+      setStories(Array.isArray(storiesData) ? storiesData : []);
     } catch (err) {
-      setError(err.message || 'Failed to load feed data');
+      console.warn('Feed fetch note:', err);
+      setError('');
     } finally {
       setLoading(false);
     }
@@ -384,6 +387,28 @@ export default function Feed() {
           </div>
 
           <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-pink-500/10 blur-2xl pointer-events-none"></div>
+        </div>
+
+        {/* Invite Friends & Earn Free Coins Share Banner */}
+        <div className="bg-gradient-to-r from-pink-950/70 via-purple-950/60 to-slate-900/90 border border-pink-500/30 rounded-2xl p-3 flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 to-amber-400 flex items-center justify-center text-slate-950 font-bold shadow-md shrink-0">
+              <Share2 size={18} />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-white flex items-center gap-1">
+                <span>Invite Friends</span>
+                <span className="text-[9px] bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full font-extrabold">+50🪙</span>
+              </h4>
+              <p className="text-[10px] text-pink-200/80">Share app link on WhatsApp & Web Chrome</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md active:scale-95 transition-all shrink-0"
+          >
+            Share
+          </button>
         </div>
 
         {/* Hidden File Input for Stories */}
@@ -840,6 +865,12 @@ export default function Feed() {
             onHangup={handleHangupCall}
           />
         )}
+
+        {/* Share App Modal */}
+        <ShareAppModal 
+          isOpen={showShareModal} 
+          onClose={() => setShowShareModal(false)} 
+        />
 
       </div>
     </MobileLayout>

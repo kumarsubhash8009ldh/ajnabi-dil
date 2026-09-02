@@ -18,7 +18,20 @@
       "referralCode": "REF_IXGY8N9AS",
       "referralPoints": 0,
       "verificationStatus": "none",
-      "verificationDetails": null
+      "verificationDetails": null,
+      "referredBy": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg"
     },
     {
       "id": "user_admin_001",
@@ -39,7 +52,20 @@
       "referralCode": "REF_001",
       "referralPoints": 0,
       "verificationStatus": "none",
-      "verificationDetails": null
+      "verificationDetails": null,
+      "referredBy": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg"
     },
     {
       "id": "user_sqmncwxt1",
@@ -60,7 +86,19 @@
       "referralPoints": 0,
       "referredBy": null,
       "verificationStatus": "none",
-      "verificationDetails": null
+      "verificationDetails": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg"
     },
     {
       "id": "user_hu003nbjy",
@@ -81,7 +119,56 @@
       "referralPoints": 0,
       "referredBy": null,
       "verificationStatus": "none",
-      "verificationDetails": null
+      "verificationDetails": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg"
+    },
+    {
+      "id": "guest_1788347146100_6546",
+      "username": "Guest_6546",
+      "password": "$2a$10$k0EdTtSGNAgUyKZGlTFDFO7PMmfb1t7F1W7Z0.EJMUYU0AOzgid9m",
+      "mobile": "",
+      "email": "",
+      "interests": [
+        "Chat",
+        "Music"
+      ],
+      "bio": "Guest visitor exploring Ajnabi Dil ✨",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=Guest_6546",
+      "coins": 100,
+      "callRate": 10,
+      "voiceCallRate": 10,
+      "videoCallRate": 20,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_6546",
+      "referralPoints": 0,
+      "verificationStatus": "none",
+      "verificationDetails": null,
+      "referredBy": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg"
     }
   ],
   "messages": [
@@ -172,5 +259,7 @@
       "caption": "mmm",
       "timestamp": 1788189546958
     }
-  ]
+  ],
+  "posts": [],
+  "sessions": []
 }

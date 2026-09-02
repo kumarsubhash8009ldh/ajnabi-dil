@@ -1,10 +1,12 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { getToken } from './utils/api';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
+import DownloadPage from './pages/DownloadPage';
 import Feed from './pages/Feed';
 import Rooms from './pages/Rooms';
 import RoomChat from './pages/RoomChat';
@@ -32,9 +34,14 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        {/* Public Routes */}
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+        {/* Public & Download Routes */}
+        <Route path="/download" element={<DownloadPage />} />
+        <Route path="/download-apk" element={<DownloadPage />} />
+        <Route path="/app" element={<DownloadPage />} />
+        <Route path="/join" element={<DownloadPage />} />
         <Route 
           path="/login" 
           element={
@@ -109,29 +116,30 @@ function App() {
             </ProtectedRoute>
           } 
         />
+        {/* Secret Master Admin Control Routes (Completely hidden from app UI) */}
+        <Route 
+          path="/master-admin-control" 
+          element={<AdminPanel />} 
+        />
+        <Route 
+          path="/secret-admin-portal" 
+          element={<AdminPanel />} 
+        />
+        <Route 
+          path="/admin-control-center-8009" 
+          element={<AdminPanel />} 
+        />
         <Route 
           path="/admin" 
-          element={
-            <ProtectedRoute>
-              <AdminPanel />
-            </ProtectedRoute>
-          } 
+          element={<AdminPanel />} 
         />
         <Route 
           path="/admin-portal" 
-          element={
-            <ProtectedRoute>
-              <AdminPanel />
-            </ProtectedRoute>
-          } 
+          element={<AdminPanel />} 
         />
         <Route 
           path="/master" 
-          element={
-            <ProtectedRoute>
-              <AdminPanel />
-            </ProtectedRoute>
-          } 
+          element={<AdminPanel />} 
         />
         <Route 
           path="/live" 
@@ -170,6 +178,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+  </ErrorBoundary>
   );
 }
 
