@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ajnabi Dil</string>
+    <string name="title_activity_main">Ajnabi Dil</string>
+    <string name="package_name">com.ajnabidil.app</string>
+    <string name="custom_url_scheme">com.ajnabidil.app</string>
+</resources>

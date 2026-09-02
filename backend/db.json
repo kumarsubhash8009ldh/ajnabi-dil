@@ -1,0 +1,176 @@
+{
+  "users": [
+    {
+      "id": "user_ixgy8n9as",
+      "username": "sam",
+      "password": "$2a$10$pu0uUgec4Kinc2M1fiXLzefkAsIwSVgcAfsfvhBRfSHJDaogaskUa",
+      "interests": [
+        "Fitness",
+        "Photography"
+      ],
+      "bio": "",
+      "avatar": "/uploads/avatar_user_ixgy8n9as_1788249431716_ug8y1m.jpeg",
+      "coins": 100,
+      "callRate": 10,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_IXGY8N9AS",
+      "referralPoints": 0,
+      "verificationStatus": "none",
+      "verificationDetails": null
+    },
+    {
+      "id": "user_admin_001",
+      "username": "admin",
+      "password": "$2a$10$/RIEPnWdafydSGZHclu8R.nfUAPmho2IQYYqJ.fbCBQDVoZneSUla",
+      "interests": [
+        "Admin",
+        "Control"
+      ],
+      "bio": "System Administrator account.",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=admin",
+      "coins": 999999,
+      "callRate": 0,
+      "isAdmin": true,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_001",
+      "referralPoints": 0,
+      "verificationStatus": "none",
+      "verificationDetails": null
+    },
+    {
+      "id": "user_sqmncwxt1",
+      "username": "testuser",
+      "password": "$2a$10$yLTUeWpjiEuSh5hV8ZdrJOH4ntfEbNCYw4VeKKj6pLilJg41WNZXW",
+      "mobile": "",
+      "interests": [],
+      "bio": "",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=testuser",
+      "coins": 100,
+      "callRate": 10,
+      "voiceCallRate": 10,
+      "videoCallRate": 20,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_SQMNCWXT1",
+      "referralPoints": 0,
+      "referredBy": null,
+      "verificationStatus": "none",
+      "verificationDetails": null
+    },
+    {
+      "id": "user_hu003nbjy",
+      "username": "Samsung",
+      "password": "$2a$10$76ZjulFOYLxgXsjR7jmd8OWccCcoeYkAZz5CP7wHPByb5R15nFPB2",
+      "mobile": "7009600157",
+      "interests": [],
+      "bio": "",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=Samsung",
+      "coins": 100,
+      "callRate": 10,
+      "voiceCallRate": 10,
+      "videoCallRate": 20,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_HU003NBJY",
+      "referralPoints": 0,
+      "referredBy": null,
+      "verificationStatus": "none",
+      "verificationDetails": null
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg_rkqk2hhmi",
+      "senderId": "user_ixgy8n9as",
+      "receiverId": "user_admin_001",
+      "content": "hi",
+      "mediaType": "text",
+      "fileUrl": null,
+      "timestamp": "2026-09-01T07:06:28.515Z"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room-1",
+      "name": "General Chat",
+      "description": "Talk about anything!"
+    },
+    {
+      "id": "room-2",
+      "name": "Gamers Hub",
+      "description": "Discuss games and find gaming buddies!"
+    },
+    {
+      "id": "room-3",
+      "name": "Fitness & Health",
+      "description": "Workout tips and healthy living."
+    },
+    {
+      "id": "room-4",
+      "name": "Travel & Explore",
+      "description": "Share your travel experiences and plans."
+    }
+  ],
+  "roomMessages": [
+    {
+      "id": "msg_koy8itqx9",
+      "roomId": "room-1",
+      "senderId": "user_ixgy8n9as",
+      "senderName": "sam",
+      "content": "hi ",
+      "mediaType": "text",
+      "fileUrl": null,
+      "timestamp": "2026-08-31T14:12:23.826Z"
+    },
+    {
+      "id": "msg_7qykgxt8e",
+      "roomId": "room-1",
+      "senderId": "user_ixgy8n9as",
+      "senderName": "sam",
+      "content": "🚫 This message was deleted",
+      "timestamp": "2026-08-31T14:12:26.377Z",
+      "deleted": true
+    },
+    {
+      "id": "msg_8809lthlg",
+      "roomId": "room-1",
+      "senderId": "user_ixgy8n9as",
+      "senderName": "sam",
+      "content": "helo",
+      "mediaType": "text",
+      "fileUrl": null,
+      "timestamp": "2026-08-31T14:12:38.143Z"
+    }
+  ],
+  "rechargeRequests": [],
+  "withdrawalRequests": [],
+  "adminSettings": {
+    "qrCodeUrl": "/logo.jpg"
+  },
+  "stories": [
+    {
+      "id": "story_tod3ak1v6",
+      "userId": "user_ixgy8n9as",
+      "username": "sam",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=sam",
+      "mediaUrl": "/uploads/story_1788189474877_2a9i1oi3x.png",
+      "caption": ",ml",
+      "timestamp": 1788189474879
+    },
+    {
+      "id": "story_zvfwsfct5",
+      "userId": "user_ixgy8n9as",
+      "username": "sam",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=sam",
+      "mediaUrl": "/uploads/story_1788189546956_fkvhkyr44.png",
+      "caption": "mmm",
+      "timestamp": 1788189546958
+    }
+  ]
+}

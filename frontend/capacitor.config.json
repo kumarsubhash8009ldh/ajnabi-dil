@@ -1,0 +1,9 @@
+{
+  "appId": "com.ajnabidil.app",
+  "appName": "Ajnabi Dil",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}
