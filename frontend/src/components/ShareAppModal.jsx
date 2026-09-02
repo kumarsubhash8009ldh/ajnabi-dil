@@ -12,8 +12,11 @@ export default function ShareAppModal({ isOpen, onClose }) {
     if (isOpen) {
       apiRequest('/api/tunnel/info')
         .then((res) => {
-          if (res && res.tunnelUrl) {
-            setLivePublicHost(res.tunnelUrl);
+          if (res) {
+            const reachable = res.preferredUrl || res.tunnelUrl || res.cloudUrl || res.lanUrl;
+            if (reachable) {
+              setLivePublicHost(reachable);
+            }
           }
         })
         .catch(() => {});
@@ -32,10 +35,12 @@ export default function ShareAppModal({ isOpen, onClose }) {
 
       const origin = window.location.origin;
       // If inside Android APK or on internal WebView domain, use server IP
-      if (origin.includes('androidplatform.net') || origin.includes('localhost')) {
+      if (origin.includes('androidplatform.net') || (origin.includes('localhost') && window.location.protocol === 'https:')) {
         return 'http://172.20.10.2:5000';
       }
-      return origin;
+      if (origin && !origin.includes('localhost') && origin !== 'null') {
+        return origin;
+      }
     }
     return 'http://172.20.10.2:5000';
   };
