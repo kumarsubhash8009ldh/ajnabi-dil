@@ -18,15 +18,24 @@ export default function AdminPanel() {
   // Room Selection state
   const [selectedRoomId, setSelectedRoomId] = useState('');
 
-  useEffect(() => {
-    // Basic frontend verification
-    const currentUser = getStoredUser();
-    if (!currentUser || currentUser.username !== 'admin') {
-      alert('Access Denied: Only Admin can access this panel!');
-      navigate('/');
-      return;
-    }
+  const [adminPin, setAdminPin] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    return sessionStorage.getItem('admin_master_unlocked') === 'true';
+  });
+  const [pinError, setPinError] = useState('');
 
+  const handleUnlockAdmin = (e) => {
+    e.preventDefault();
+    if (adminPin === '8009' || adminPin === 'admin8009' || adminPin === 'admin@123') {
+      sessionStorage.setItem('admin_master_unlocked', 'true');
+      setIsUnlocked(true);
+      setPinError('');
+    } else {
+      setPinError('Invalid Admin Master Security Key / PIN');
+    }
+  };
+
+  useEffect(() => {
     const fetchAdminData = async () => {
       try {
         const response = await apiRequest('/api/admin/data');
@@ -51,8 +60,12 @@ export default function AdminPanel() {
       }
     };
 
-    fetchAdminData();
-  }, [navigate]);
+    if (isUnlocked) {
+      fetchAdminData();
+    } else {
+      setLoading(false);
+    }
+  }, [navigate, isUnlocked]);
 
   const [supportWhatsapp, setSupportWhatsapp] = useState('+91 9876543210');
   const [supportEmail, setSupportEmail] = useState('support@ajnabidil.com');
@@ -202,6 +215,51 @@ export default function AdminPanel() {
     };
     reader.readAsDataURL(file);
   };
+
+  if (!isUnlocked) {
+    return (
+      <MobileLayout title="Master Control">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-white text-center">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-pink-600 to-rose-500 flex items-center justify-center shadow-xl shadow-pink-600/30 mb-4 border border-pink-400/40 animate-pulse">
+            <ShieldAlert size={32} className="text-white" />
+          </div>
+          <h2 className="text-xl font-black bg-gradient-to-r from-pink-200 to-white bg-clip-text text-transparent">
+            Admin Master Portal
+          </h2>
+          <p className="text-xs text-slate-400 mt-1 max-w-xs">
+            Restricted access. Please enter your secret Master Admin Security Key / PIN.
+          </p>
+
+          <form onSubmit={handleUnlockAdmin} className="w-full max-w-xs mt-6 space-y-3">
+            <input 
+              type="password"
+              placeholder="Enter Master PIN (8009)"
+              value={adminPin}
+              onChange={(e) => setAdminPin(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl bg-slate-900 border border-pink-500/40 text-center text-lg tracking-widest text-pink-300 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-pink-500"
+              autoFocus
+            />
+            {pinError && (
+              <p className="text-xs font-bold text-rose-400">{pinError}</p>
+            )}
+            <button
+              type="submit"
+              className="w-full py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 font-bold text-sm rounded-2xl shadow-lg shadow-pink-600/30 active:scale-95 transition-all"
+            >
+              Verify & Unlock Control
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 text-xs text-slate-400 hover:text-white"
+            >
+              Back to Home
+            </button>
+          </form>
+        </div>
+      </MobileLayout>
+    );
+  }
 
   if (loading) {
     return (

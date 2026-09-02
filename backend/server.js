@@ -33,13 +33,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 app.get('/ping', (req, res) => res.send('pong'));
-app.get('/', (req, res) => res.json({ status: 'Ajnabi Dil Backend Server is Live & Healthy' }));
-
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR);
 }
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Serve Frontend Static Files for Web Chrome & Browser access
+const FRONTEND_DIST = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(FRONTEND_DIST)) {
+  app.use(express.static(FRONTEND_DIST));
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'chitchat_super_secret_key_123';
 
@@ -1333,7 +1337,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// SPA wildcard fallback for Chrome and Web Browser navigation
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  const indexHtml = path.join(FRONTEND_DIST, 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    return res.sendFile(indexHtml);
+  }
+  res.json({ status: 'Ajnabi Dil Realtime Engine is running' });
+});
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Chitchat server running on port ${PORT}`);
+  console.log(`Ajnabi Dil server running on port ${PORT}`);
 });

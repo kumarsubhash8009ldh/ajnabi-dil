@@ -394,7 +394,12 @@ export default function Profile() {
 
   const getReferralShareUrl = () => {
     const code = profile?.referralCode || 'AJNABIDIL';
-    return `http://${window.location.hostname || '172.20.10.2'}:3000/#/register?ref=${code}`;
+    if (typeof window !== 'undefined') {
+      const origin = window.location.origin;
+      const pathname = window.location.pathname;
+      return `${origin}${pathname}#/register?ref=${code}`;
+    }
+    return `https://ajnabidil.app/#/register?ref=${code}`;
   };
 
   const handleCopyReferralLink = () => {

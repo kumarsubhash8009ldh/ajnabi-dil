@@ -1,11 +1,13 @@
-import React from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, MessageSquare, User, LogOut, Shield, Radio, Headphones, Phone } from 'lucide-react';
+import { Home, Users, MessageSquare, User, LogOut, Radio, Headphones, Phone, Share2 } from 'lucide-react';
 import { clearSession, getStoredUser } from '../utils/api';
+import ShareAppModal from './ShareAppModal';
 
 export default function MobileLayout({ children, title }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [showShareModal, setShowShareModal] = useState(false);
   const user = getStoredUser();
   const coins = user ? user.coins : 100;
   
@@ -19,11 +21,11 @@ export default function MobileLayout({ children, title }) {
   };
   
   return (
-    // Outer container: Centers the mobile screen on desktop
+    // Outer container: Centers the mobile screen on desktop / browser
     <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-0 md:p-4">
       {/* Smartphone container */}
-      <div className="w-full md:w-[410px] h-screen md:h-[840px] md:max-h-[90vh] bg-slate-950 flex flex-col shadow-2xl md:rounded-[40px] md:border-[10px] md:border-slate-800 overflow-hidden relative">
-        {/* Phone Notch/Status Bar for Desktop */}
+      <div className="w-full md:w-[420px] h-screen md:h-[860px] md:max-h-[92vh] bg-slate-950 flex flex-col shadow-2xl md:rounded-[40px] md:border-[8px] md:border-slate-800 overflow-hidden relative">
+        {/* Phone Notch/Status Bar for Desktop Chrome */}
         <div className="hidden md:flex justify-between items-center bg-slate-900 text-slate-300 text-[11px] px-6 py-1 z-50 border-b border-white/5">
           <span>9:41</span>
           <div className="w-20 h-4 bg-black rounded-full absolute left-1/2 transform -translate-x-1/2 top-1"></div>
@@ -37,7 +39,7 @@ export default function MobileLayout({ children, title }) {
         
         {/* Header */}
         <header className="bg-gradient-to-r from-slate-950 via-slate-900 to-black text-white px-4 py-3 flex justify-between items-center shadow-lg border-b border-pink-900/30 z-30">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
             <img 
               src="/logo.jpg" 
               alt="Ajnabi Dil Logo" 
@@ -49,6 +51,17 @@ export default function MobileLayout({ children, title }) {
           </div>
           
           <div className="flex items-center gap-1.5">
+            {/* Share App Button */}
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="p-1.5 bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 rounded-full transition-all flex items-center gap-1 text-xs px-2 border border-pink-500/30 active:scale-95"
+              title="Share App / Invite Friends"
+            >
+              <Share2 size={15} />
+              <span className="hidden xs:inline font-bold">Share</span>
+            </button>
+
+            {/* Coins Balance */}
             <button 
               onClick={() => navigate('/shop')} 
               className="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-slate-950 text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md active:scale-95 transition-all"
@@ -58,6 +71,7 @@ export default function MobileLayout({ children, title }) {
               <span>{coins}</span>
             </button>
             
+            {/* Help & Support */}
             <button 
               onClick={() => navigate('/help')} 
               className={`p-1.5 hover:bg-white/10 rounded-full transition-colors ${isActive('/help') ? 'bg-white/10 text-pink-300' : 'text-slate-300'}`}
@@ -66,16 +80,7 @@ export default function MobileLayout({ children, title }) {
               <Headphones size={18} />
             </button>
             
-            {user && user.username === 'admin' && (
-              <button 
-                onClick={() => navigate('/admin')} 
-                className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-slate-300"
-                title="Admin Control Panel"
-              >
-                <Shield size={18} />
-              </button>
-            )}
-            
+            {/* Logout */}
             <button 
               onClick={handleLogout} 
               className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-red-400"
@@ -86,7 +91,7 @@ export default function MobileLayout({ children, title }) {
           </div>
         </header>
         
-        {/* Main Content Area with Ajnabi Dil Luxury Theme Background */}
+        {/* Main Content Area */}
         <main 
           className="flex-1 overflow-y-auto flex flex-col pb-16 relative"
           style={{
@@ -173,6 +178,9 @@ export default function MobileLayout({ children, title }) {
             <span className="text-[9px]">Profile</span>
           </button>
         </nav>
+
+        {/* App Sharing Modal */}
+        <ShareAppModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} />
       </div>
     </div>
   );

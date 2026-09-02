@@ -11,12 +11,27 @@ export const getBaseUrl = () => {
     }
 
     const host = window.location.hostname;
-    // If accessed from a web browser on desktop/laptop
-    if (host && host !== '' && !host.includes('androidplatform.net') && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-      return `http://${host}:5000`;
+    const port = window.location.port;
+    const protocol = window.location.protocol || 'http:';
+
+    // When running inside Android WebView APK
+    if (host && host.includes('androidplatform.net')) {
+      return 'http://172.20.10.2:5000';
     }
+
+    // When running on backend express static server (port 5000 or web domain)
+    if (port === '5000' || (port === '' && host && host !== '')) {
+      return window.location.origin;
+    }
+
+    // When running on Vite dev server (port 5173, etc.) on localhost
     if (host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:5000';
+    }
+
+    // Remote LAN or IP
+    if (host && host !== '') {
+      return `${protocol}//${host}:5000`;
     }
   }
   // Default fallback (Environment variable or LAN IP for APK)

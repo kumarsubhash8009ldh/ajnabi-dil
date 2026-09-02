@@ -118,6 +118,22 @@ function App() {
           } 
         />
         <Route 
+          path="/admin-portal" 
+          element={
+            <ProtectedRoute>
+              <AdminPanel />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/master" 
+          element={
+            <ProtectedRoute>
+              <AdminPanel />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/live" 
           element={
             <ProtectedRoute>
