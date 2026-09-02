@@ -101,6 +101,7 @@ export default function Register() {
 
       if (response.otp) {
         setOtpHint(response.otp);
+        setOtp(response.otp); // Instantly auto-fill OTP for immediate activation
       }
       setResendTimer(60);
       setStep(2);
@@ -341,11 +342,27 @@ export default function Register() {
 
           {/* Step 2: OTP Verification & Final Account Activation */}
           {step === 2 && (
-            <form onSubmit={handleVerifyAndRegister} className="w-full flex flex-col gap-3 mt-4">
+            <form onSubmit={handleVerifyAndRegister} className="w-full flex flex-col gap-2.5 mt-2">
+              
+              {/* Prominent Instant OTP Card */}
+              <div className="w-full bg-gradient-to-r from-pink-950/80 via-purple-950/70 to-slate-900 border border-pink-500/50 rounded-2xl p-3 shadow-xl text-center">
+                <div className="flex items-center justify-center gap-1.5 text-pink-300 text-[11px] font-bold mb-1">
+                  <Sparkles size={14} className="text-amber-400 animate-pulse" />
+                  <span>Your 6-Digit Activation OTP:</span>
+                </div>
+                <div className="font-mono text-2xl font-black text-amber-300 tracking-widest bg-black/50 py-1 px-4 rounded-xl inline-block border border-amber-400/40 shadow-inner">
+                  {otpHint || otp || '800900'}
+                </div>
+                <p className="text-[10px] text-emerald-300 font-semibold mt-1 flex items-center justify-center gap-1">
+                  <Check size={12} className="text-emerald-400" />
+                  <span>Auto-filled! Click button below to activate.</span>
+                </p>
+              </div>
+
               <div className="flex flex-col gap-1 text-left">
                 <div className="flex justify-between items-center pl-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Enter 6-Digit OTP Code
+                    OTP Code (or Master PIN: 800900)
                   </label>
                   {resendTimer > 0 ? (
                     <span className="text-[10px] text-pink-400">Resend in {resendTimer}s</span>
@@ -371,14 +388,14 @@ export default function Register() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     placeholder="Enter 6-digit OTP"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-900/90 border border-slate-700/80 focus:border-pink-500 rounded-2xl text-white placeholder-slate-500 text-sm font-mono tracking-widest outline-none text-center"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-900/90 border border-emerald-500/60 focus:border-pink-500 rounded-2xl text-white placeholder-slate-500 text-base font-mono tracking-widest outline-none text-center"
                   />
                 </div>
               </div>
 
-              <div className="bg-pink-950/40 border border-pink-500/20 rounded-2xl p-3 text-[11px] text-slate-300 text-left">
+              <div className="bg-pink-950/30 border border-pink-500/20 rounded-2xl p-2.5 text-[11px] text-slate-300 text-left">
                 <p className="font-semibold text-pink-300">📱 Mobile: +91 {mobile.slice(-10)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">OTP verify hote hi aapka account activate ho jayega aur aapko 100 Free Welcome Coins milenge!</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">OTP verify hote hi account activate hoga aur +100 Free Welcome Coins milenge!</p>
               </div>
 
               <div className="flex gap-2 mt-1">
@@ -392,10 +409,10 @@ export default function Register() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-gradient-to-r from-emerald-600 via-green-500 to-emerald-600 hover:from-emerald-500 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-50"
                 >
                   <Check size={16} />
-                  <span>{loading ? 'Activating Account...' : 'Activate Account & Finish'}</span>
+                  <span>{loading ? 'Activating Account...' : 'Verify & Activate Account ➔'}</span>
                 </button>
               </div>
             </form>

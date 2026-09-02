@@ -43,6 +43,7 @@ export default function ForgotPasswordModal({ isOpen, onClose, onSuccess }) {
 
       if (res.otp) {
         setReceivedOtpHint(res.otp);
+        setOtp(res.otp); // Instantly auto-fill OTP
       }
       setResendTimer(60);
       setStep(2);
