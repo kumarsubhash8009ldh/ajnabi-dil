@@ -194,7 +194,8 @@ const db = {
   
   getUserByUsername: (username) => {
     if (!username) return null;
-    return memoryDb.users.find(u => (u.username || '').toLowerCase() === username.toLowerCase());
+    const target = String(username).trim().toLowerCase();
+    return memoryDb.users.find(u => (u.username || '').trim().toLowerCase() === target);
   },
 
   getUserByMobile: (mobile) => {

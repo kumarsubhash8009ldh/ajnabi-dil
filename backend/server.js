@@ -101,11 +101,52 @@ function authenticateAdmin(req, res, next) {
 // In-Memory OTP Store: Map<mobileNumber, { code: string, expiresAt: number, action: string }>
 const otpStore = new Map();
 
+// Helper: Strict Username Validation & Global Uniqueness Check
+function validateUsername(username, excludeUserId = null) {
+  if (!username || typeof username !== 'string') {
+    return { valid: false, error: 'Username is required' };
+  }
+  const clean = username.trim();
+  if (clean.length < 3) {
+    return { valid: false, error: 'Username kam se kam 3 characters ka hona chahiye.' };
+  }
+  if (clean.length > 25) {
+    return { valid: false, error: 'Username maximum 25 characters ka ho sakta hai.' };
+  }
+  if (!/^[a-zA-Z0-9_.-]+$/.test(clean)) {
+    return { valid: false, error: 'Username me sirf letters, numbers, underscores (_), hyphens (-), aur dots (.) allow hain.' };
+  }
+  // Strict case-insensitive uniqueness check across all users
+  const existing = db.getUserByUsername(clean);
+  if (existing && (!excludeUserId || existing.id !== excludeUserId)) {
+    return { 
+      valid: false, 
+      error: `Yeh username (@${clean}) pehle se kisi aur ka hai! Har user ka username unique hona zaroori hai.` 
+    };
+  }
+  return { valid: true, cleanUsername: clean };
+}
+
 // --- AUTHENTICATION ROUTES ---
+
+// Real-time Username Availability Check
+app.get('/api/auth/check-username', (req, res) => {
+  const { username, excludeUserId } = req.query;
+  if (!username) {
+    return res.status(400).json({ available: false, error: 'Username parameter required' });
+  }
+
+  const check = validateUsername(username, excludeUserId || null);
+  if (!check.valid) {
+    return res.json({ available: false, error: check.error });
+  }
+
+  res.json({ available: true, message: `Username @${check.cleanUsername} available hai!` });
+});
 
 // Send OTP (For Registration, Forgot Password, or Phone Verification)
 app.post('/api/auth/send-otp', (req, res) => {
-  const { mobile, action } = req.body;
+  const { mobile, username, action } = req.body;
   
   if (!mobile) {
     return res.status(400).json({ error: 'Mobile number is required' });
@@ -116,13 +157,22 @@ app.post('/api/auth/send-otp', (req, res) => {
     return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
   }
 
-  // 1-Phone = 1-Account: Check during registration
+  // Registration Validations: 1-Phone = 1-Account AND Unique Username
   if (action === 'register') {
-    const existingUser = db.getUserByMobile(normPhone);
-    if (existingUser) {
+    // 1. Strict Unique Mobile Check
+    const existingPhoneUser = db.getUserByMobile(normPhone);
+    if (existingPhoneUser) {
       return res.status(400).json({ 
         error: `Yeh mobile number (${normPhone}) pehle se registered hai! Ek phone number par sirf 1 ID allow hai.` 
       });
+    }
+
+    // 2. Strict Unique Username Check
+    if (username) {
+      const userCheck = validateUsername(username);
+      if (!userCheck.valid) {
+        return res.status(400).json({ error: userCheck.error });
+      }
     }
   }
 
@@ -227,7 +277,7 @@ app.post('/api/auth/reset-password-otp', (req, res) => {
   });
 });
 
-// Register (Enforces OTP Verification & Strict 1 Mobile Number = 1 Account)
+// Register (Enforces OTP Verification, Strict Unique Username & Strict 1 Mobile = 1 Account)
 app.post('/api/auth/register', (req, res) => {
   const { username, password, referralCode, mobile, otp } = req.body;
   
@@ -235,17 +285,16 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'Username, password, and mobile number are required' });
   }
 
-  const cleanUsername = username.trim();
-  const normPhone = db.normalizePhone(mobile);
+  // 1. Strict Username Validation & Global Uniqueness Check
+  const userCheck = validateUsername(username);
+  if (!userCheck.valid) {
+    return res.status(400).json({ error: userCheck.error });
+  }
+  const cleanUsername = userCheck.cleanUsername;
 
+  const normPhone = db.normalizePhone(mobile);
   if (!normPhone || normPhone.length < 10) {
     return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
-  }
-  
-  // 1. Check Username Uniqueness
-  const existingUser = db.getUserByUsername(cleanUsername);
-  if (existingUser) {
-    return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
   }
 
   // 2. Strict 1-Phone = 1-Account Check
@@ -405,8 +454,13 @@ app.post('/api/auth/login', (req, res) => {
 
 // One-Click Instant Guest / Web Demo Login (for Chrome & Browser visitors)
 app.post('/api/auth/guest-login', (req, res) => {
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-  const guestUsername = `Guest_${randomSuffix}`;
+  let guestUsername = '';
+  let randomSuffix = '';
+  do {
+    randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    guestUsername = `Guest_${randomSuffix}`;
+  } while (db.getUserByUsername(guestUsername));
+
   const guestId = `guest_${Date.now()}_${randomSuffix}`;
   const guestPassword = bcrypt.hashSync(`guest_${randomSuffix}`, 10);
   
@@ -503,12 +557,21 @@ app.get('/api/users/profile', authenticateToken, (req, res) => {
 // Update profile (interests, bio, callRate, email, mobile, custom calling rates, toggles, cover)
 app.put('/api/users/profile', authenticateToken, (req, res) => {
   const { 
-    interests, bio, avatar, coverPhoto, callRate, voiceCallRate, videoCallRate, 
+    username, interests, bio, avatar, coverPhoto, callRate, voiceCallRate, videoCallRate, 
     email, mobile, incomingCallsEnabled, friendsOnly, goalHours 
   } = req.body;
   const user = db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   
+  let finalUsername = user.username;
+  if (username && username.trim().toLowerCase() !== user.username.toLowerCase()) {
+    const check = validateUsername(username, user.id);
+    if (!check.valid) {
+      return res.status(400).json({ error: check.error });
+    }
+    finalUsername = check.cleanUsername;
+  }
+
   let finalAvatar = user.avatar;
   if (avatar && avatar.startsWith('data:image/')) {
     const saved = saveBase64File(avatar, `avatar_${user.id}`);
@@ -527,6 +590,7 @@ app.put('/api/users/profile', authenticateToken, (req, res) => {
 
   const updatedUser = {
     ...user,
+    username: finalUsername,
     email: email !== undefined ? email : user.email,
     mobile: mobile !== undefined ? mobile : user.mobile,
     interests: interests !== undefined ? interests : user.interests,
@@ -537,7 +601,6 @@ app.put('/api/users/profile', authenticateToken, (req, res) => {
     voiceCallRate: voiceCallRate !== undefined ? Math.max(1, Number(voiceCallRate)) : (user.voiceCallRate || 10),
     videoCallRate: videoCallRate !== undefined ? Math.max(5, Number(videoCallRate)) : (user.videoCallRate || 20),
     incomingCallsEnabled: incomingCallsEnabled !== undefined ? incomingCallsEnabled : user.incomingCallsEnabled,
-    friendsOnly: friendsOnly !== undefined ? friendsOnly : user.friendsOnly,
     goalHours: goalHours !== undefined ? Number(goalHours) : user.goalHours
   };
   

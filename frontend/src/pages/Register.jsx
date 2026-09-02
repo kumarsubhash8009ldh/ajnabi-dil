@@ -6,6 +6,7 @@ import { apiRequest, setSession } from '../utils/api';
 export default function Register() {
   const [step, setStep] = useState(1); // 1: Fill Details, 2: Verify OTP
   const [username, setUsername] = useState('');
+  const [usernameStatus, setUsernameStatus] = useState(null); // { available: boolean, message: string }
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [mobile, setMobile] = useState('');
@@ -18,6 +19,28 @@ export default function Register() {
   const [welcomeModal, setWelcomeModal] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Real-time debounced username uniqueness check
+  useEffect(() => {
+    const clean = username.trim();
+    if (!clean || clean.length < 3) {
+      setUsernameStatus(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiRequest(`/api/auth/check-username?username=${encodeURIComponent(clean)}`);
+        if (res.available) {
+          setUsernameStatus({ available: true, message: `@${clean} is unique & available!` });
+        } else {
+          setUsernameStatus({ available: false, message: res.error || 'Username already taken' });
+        }
+      } catch (e) {
+        setUsernameStatus(null);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [username]);
 
   // Auto-detect referral code from query params (works for both standard and hash routing)
   useEffect(() => {
@@ -47,7 +70,7 @@ export default function Register() {
     return () => clearTimeout(timer);
   }, [resendTimer]);
 
-  // Step 1: Send OTP to Mobile Number (with 1-Phone constraint check)
+  // Step 1: Send OTP to Mobile Number (with 1-Phone constraint and Unique Username check)
   const handleSendOtp = async (e) => {
     if (e) e.preventDefault();
     if (!username || !password || !confirmPassword || !mobile) {
@@ -72,6 +95,7 @@ export default function Register() {
     try {
       const response = await apiRequest('/api/auth/send-otp', 'POST', {
         mobile: cleanPhone,
+        username: username.trim(),
         action: 'register'
       });
 
@@ -207,7 +231,15 @@ export default function Register() {
           {step === 1 && (
             <form onSubmit={handleSendOtp} className="w-full flex flex-col gap-2 mt-3">
               <div className="flex flex-col gap-0.5 text-left">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider pl-1">Username</label>
+                <div className="flex justify-between items-center pl-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Username</label>
+                  {usernameStatus && (
+                    <span className={`text-[9px] font-bold flex items-center gap-0.5 ${usernameStatus.available ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {usernameStatus.available ? <Check size={10} /> : <AlertCircle size={10} />}
+                      <span>{usernameStatus.available ? 'Unique & Available' : 'Already Taken'}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                     <User size={15} />
@@ -216,9 +248,9 @@ export default function Register() {
                     type="text"
                     required
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Choose username"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs font-medium outline-none"
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                    placeholder="e.g. rahul_99 (Unique username)"
+                    className={`w-full pl-9 pr-3 py-2 bg-slate-900/80 border ${usernameStatus ? (usernameStatus.available ? 'border-emerald-500/80' : 'border-red-500/80') : 'border-slate-700/80'} focus:border-pink-500 rounded-xl text-white placeholder-slate-500 text-xs font-medium outline-none transition-colors`}
                   />
                 </div>
               </div>
