@@ -1787,10 +1787,46 @@ app.get('*', (req, res, next) => {
   res.json({ status: 'Ajnabi Dil Realtime Engine is running' });
 });
 
+const { spawn } = require('child_process');
 const PORT = process.env.PORT || 5000;
 
-// Setup resilient tunnel
+// Setup resilient worldwide public tunnel (Cloudflare & Fallback)
 async function setupPublicTunnel(port) {
+  const cloudflaredPath = path.join(__dirname, '../cloudflared.exe');
+  
+  if (fs.existsSync(cloudflaredPath)) {
+    try {
+      console.log('⚡ Launching High-Speed Cloudflare Worldwide Tunnel (0-barrier, works globally on all 4G/5G/Wi-Fi)...');
+      const cfProcess = spawn(cloudflaredPath, ['tunnel', '--url', `http://localhost:${port}`]);
+      
+      cfProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+        if (match && match[0] && liveTunnelUrl !== match[0]) {
+          liveTunnelUrl = match[0];
+          console.log(`\n======================================================`);
+          console.log(`🌐 WORLDWIDE PUBLIC LIVE LINK : ${liveTunnelUrl}`);
+          console.log(`📥 PUBLIC APK DOWNLOAD LINK  : ${liveTunnelUrl}/download-apk`);
+          console.log(`📱 PUBLIC SHARE/DOWNLOAD PAGE: ${liveTunnelUrl}/#/download`);
+          console.log(`======================================================\n`);
+        }
+      });
+      
+      cfProcess.on('error', (err) => {
+        console.log('Cloudflare tunnel error:', err.message);
+      });
+
+      cfProcess.on('close', () => {
+        console.log('Cloudflare tunnel closed.');
+        liveTunnelUrl = '';
+      });
+      return;
+    } catch (err) {
+      console.log('Cloudflare tunnel startup notice:', err.message);
+    }
+  }
+
+  // Fallback to localtunnel
   try {
     const localtunnel = require('localtunnel');
     const tunnel = await localtunnel({ port: port });
@@ -1801,13 +1837,6 @@ async function setupPublicTunnel(port) {
     console.log(`======================================================\n`);
 
     tunnel.on('close', () => {
-      console.log('Tunnel closed. Reconnecting in 5 seconds...');
-      liveTunnelUrl = '';
-      setTimeout(() => setupPublicTunnel(port), 5000);
-    });
-
-    tunnel.on('error', (err) => {
-      console.log('Tunnel error:', err.message);
       liveTunnelUrl = '';
     });
   } catch (err) {
