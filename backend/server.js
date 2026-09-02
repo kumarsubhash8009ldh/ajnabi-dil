@@ -1504,7 +1504,11 @@ app.get('/AjnabiDil_Latest.apk', handleApkDownload);
 app.get('/AjnabiDil.apk', handleApkDownload);
 
 app.get('/api/app/info', (req, res) => {
-  const serverBase = liveTunnelUrl || `http://${activeLocalIp}:${PORT}`;
+  const host = req.get('host');
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const isCloudHost = host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('172.20.10.2');
+  const serverBase = isCloudHost ? `${protocol}://${host}` : (liveTunnelUrl || `http://${activeLocalIp}:${PORT}`);
+
   res.json({
     appName: 'Ajnabi Dil',
     version: '2.5.0',
@@ -1519,14 +1523,19 @@ app.get('/api/app/info', (req, res) => {
 
 let liveTunnelUrl = '';
 
-// Live Tunnel Info Endpoint for public sharing
+// Live Tunnel & Cloud Host Info Endpoint for public sharing
 app.get('/api/tunnel/info', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const isCloudHost = host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('172.20.10.2');
+  const cloudUrl = isCloudHost ? `${protocol}://${host}` : '';
   const lanUrl = `http://${activeLocalIp}:${PORT}`;
   const localUrl = `http://localhost:${PORT}`;
-  const preferredUrl = liveTunnelUrl || lanUrl;
+  const preferredUrl = cloudUrl || liveTunnelUrl || lanUrl;
 
   res.json({
-    tunnelUrl: liveTunnelUrl,
+    tunnelUrl: liveTunnelUrl || cloudUrl,
+    cloudUrl: cloudUrl,
     lanUrl: lanUrl,
     localUrl: localUrl,
     preferredUrl: preferredUrl,
