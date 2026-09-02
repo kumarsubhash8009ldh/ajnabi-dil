@@ -53,10 +53,25 @@ function getDefaultData() {
   };
 }
 
+// Helper to normalize phone numbers (e.g. extracts last 10 digits)
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+}
+
 // Normalize user object fields
 function normalizeUser(u) {
+  const normPhone = normalizePhone(u.mobile || '');
   return {
     ...u,
+    mobile: normPhone,
+    isPhoneVerified: u.isPhoneVerified !== undefined ? Boolean(u.isPhoneVerified) : true,
+    phoneOtp: u.phoneOtp || null,
+    phoneOtpExpires: u.phoneOtpExpires || null,
     coins: u.coins !== undefined ? u.coins : 100,
     callRate: u.callRate !== undefined ? u.callRate : 10,
     isPartner: u.isPartner !== undefined ? u.isPartner : false,
@@ -181,6 +196,14 @@ const db = {
     if (!username) return null;
     return memoryDb.users.find(u => (u.username || '').toLowerCase() === username.toLowerCase());
   },
+
+  getUserByMobile: (mobile) => {
+    const norm = normalizePhone(mobile);
+    if (!norm) return null;
+    return memoryDb.users.find(u => normalizePhone(u.mobile) === norm);
+  },
+
+  normalizePhone,
   
   saveUser: (user) => {
     const normalized = normalizeUser(user);

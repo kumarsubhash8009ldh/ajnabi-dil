@@ -31,7 +31,11 @@
       "incomingCallsEnabled": true,
       "friendsOnly": false,
       "isBanned": false,
-      "coverPhoto": "/theme-bg.jpg"
+      "coverPhoto": "/theme-bg.jpg",
+      "mobile": "",
+      "isPhoneVerified": true,
+      "phoneOtp": null,
+      "phoneOtpExpires": null
     },
     {
       "id": "user_admin_001",
@@ -65,7 +69,11 @@
       "incomingCallsEnabled": true,
       "friendsOnly": false,
       "isBanned": false,
-      "coverPhoto": "/theme-bg.jpg"
+      "coverPhoto": "/theme-bg.jpg",
+      "mobile": "",
+      "isPhoneVerified": true,
+      "phoneOtp": null,
+      "phoneOtpExpires": null
     },
     {
       "id": "user_sqmncwxt1",
@@ -98,7 +106,10 @@
       "incomingCallsEnabled": true,
       "friendsOnly": false,
       "isBanned": false,
-      "coverPhoto": "/theme-bg.jpg"
+      "coverPhoto": "/theme-bg.jpg",
+      "isPhoneVerified": true,
+      "phoneOtp": null,
+      "phoneOtpExpires": null
     },
     {
       "id": "user_hu003nbjy",
@@ -131,7 +142,10 @@
       "incomingCallsEnabled": true,
       "friendsOnly": false,
       "isBanned": false,
-      "coverPhoto": "/theme-bg.jpg"
+      "coverPhoto": "/theme-bg.jpg",
+      "isPhoneVerified": true,
+      "phoneOtp": null,
+      "phoneOtpExpires": null
     },
     {
       "id": "guest_1788347146100_6546",
@@ -157,6 +171,45 @@
       "verificationStatus": "none",
       "verificationDetails": null,
       "referredBy": null,
+      "referralCodeUsed": null,
+      "flowers": 54,
+      "followersCount": 89,
+      "friendsCount": 1,
+      "sessionsCount": 24,
+      "rating": 4.9,
+      "goalHours": 20,
+      "completedGoalHours": 14.5,
+      "incomingCallsEnabled": true,
+      "friendsOnly": false,
+      "isBanned": false,
+      "coverPhoto": "/theme-bg.jpg",
+      "isPhoneVerified": true,
+      "phoneOtp": null,
+      "phoneOtpExpires": null
+    },
+    {
+      "id": "user_4bugp4mru",
+      "username": "test_user_6902",
+      "password": "$2a$10$si/s08oBFpD56rTWEUSysOPize2fSRm5C8otGXFuOH4UWWvZp/5MO",
+      "mobile": "9876599999",
+      "isPhoneVerified": true,
+      "interests": [],
+      "bio": "",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=test_user_6902",
+      "coins": 100,
+      "callRate": 10,
+      "voiceCallRate": 10,
+      "videoCallRate": 20,
+      "isPartner": false,
+      "partnerId": null,
+      "earnings": 0,
+      "referralCode": "REF_4BUGP4MRU",
+      "referralPoints": 0,
+      "referredBy": null,
+      "verificationStatus": "none",
+      "verificationDetails": null,
+      "phoneOtp": null,
+      "phoneOtpExpires": null,
       "referralCodeUsed": null,
       "flowers": 54,
       "followersCount": 89,

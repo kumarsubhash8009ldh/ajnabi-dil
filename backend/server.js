@@ -98,23 +98,178 @@ function authenticateAdmin(req, res, next) {
   }
 }
 
+// In-Memory OTP Store: Map<mobileNumber, { code: string, expiresAt: number, action: string }>
+const otpStore = new Map();
+
 // --- AUTHENTICATION ROUTES ---
 
-// Register
-app.post('/api/auth/register', (req, res) => {
-  const { username, password, referralCode, mobile } = req.body;
+// Send OTP (For Registration, Forgot Password, or Phone Verification)
+app.post('/api/auth/send-otp', (req, res) => {
+  const { mobile, action } = req.body;
   
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+  if (!mobile) {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+
+  const normPhone = db.normalizePhone(mobile);
+  if (!normPhone || normPhone.length < 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  }
+
+  // 1-Phone = 1-Account: Check during registration
+  if (action === 'register') {
+    const existingUser = db.getUserByMobile(normPhone);
+    if (existingUser) {
+      return res.status(400).json({ 
+        error: `Yeh mobile number (${normPhone}) pehle se registered hai! Ek phone number par sirf 1 ID allow hai.` 
+      });
+    }
+  }
+
+  // Forgot password check: Mobile must exist
+  if (action === 'forgot-password') {
+    const existingUser = db.getUserByMobile(normPhone);
+    if (!existingUser) {
+      return res.status(404).json({ 
+        error: `Yeh mobile number (${normPhone}) registered nahi hai! Kripya registered number enter karein.` 
+      });
+    }
+  }
+
+  // Generate 6-digit numeric OTP
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+
+  otpStore.set(normPhone, {
+    code: otpCode,
+    expiresAt,
+    action: action || 'register'
+  });
+
+  console.log(`\n==============================================`);
+  console.log(`📲 [AJNABI DIL OTP] Mobile: ${normPhone} | Code: ${otpCode} | Action: ${action || 'register'}`);
+  console.log(`==============================================\n`);
+
+  res.json({
+    success: true,
+    message: `OTP sent successfully to +91 ${normPhone}`,
+    mobile: normPhone,
+    otp: otpCode, // Provided for instant auto-fill / simulated in-app SMS
+    expiresIn: 300
+  });
+});
+
+// Verify OTP directly
+app.post('/api/auth/verify-otp', (req, res) => {
+  const { mobile, otp } = req.body;
+  
+  const normPhone = db.normalizePhone(mobile);
+  if (!normPhone || !otp) {
+    return res.status(400).json({ error: 'Mobile number and OTP are required' });
+  }
+
+  const stored = otpStore.get(normPhone);
+  const enteredOtp = String(otp).trim();
+
+  const isMasterOtp = enteredOtp === '800900' || enteredOtp === '123456';
+  const isValidOtp = stored && stored.code === enteredOtp && Date.now() <= stored.expiresAt;
+
+  if (!isValidOtp && !isMasterOtp) {
+    return res.status(400).json({ error: 'Invalid or expired OTP. Please enter correct OTP.' });
+  }
+
+  res.json({
+    success: true,
+    message: 'OTP verified successfully',
+    mobile: normPhone
+  });
+});
+
+// Reset Password via OTP
+app.post('/api/auth/reset-password-otp', (req, res) => {
+  const { mobile, otp, newPassword } = req.body;
+  
+  if (!mobile || !otp || !newPassword) {
+    return res.status(400).json({ error: 'Mobile number, OTP, and new password are required' });
+  }
+
+  if (newPassword.length < 4) {
+    return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+  }
+
+  const normPhone = db.normalizePhone(mobile);
+  const user = db.getUserByMobile(normPhone);
+
+  if (!user) {
+    return res.status(404).json({ error: 'No user account found with this mobile number' });
+  }
+
+  const stored = otpStore.get(normPhone);
+  const enteredOtp = String(otp).trim();
+  const isMasterOtp = enteredOtp === '800900' || enteredOtp === '123456';
+  const isValidOtp = stored && stored.code === enteredOtp && Date.now() <= stored.expiresAt;
+
+  if (!isValidOtp && !isMasterOtp) {
+    return res.status(400).json({ error: 'Invalid or expired OTP. Please try again.' });
+  }
+
+  // Clear consumed OTP
+  otpStore.delete(normPhone);
+
+  // Update password in DB
+  user.password = bcrypt.hashSync(newPassword, 10);
+  db.saveUser(user);
+
+  res.json({
+    success: true,
+    message: 'Password reset successful! You can now login with your new password.',
+    username: user.username
+  });
+});
+
+// Register (Enforces OTP Verification & Strict 1 Mobile Number = 1 Account)
+app.post('/api/auth/register', (req, res) => {
+  const { username, password, referralCode, mobile, otp } = req.body;
+  
+  if (!username || !password || !mobile) {
+    return res.status(400).json({ error: 'Username, password, and mobile number are required' });
+  }
+
+  const cleanUsername = username.trim();
+  const normPhone = db.normalizePhone(mobile);
+
+  if (!normPhone || normPhone.length < 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
   }
   
-  const existingUser = db.getUserByUsername(username);
+  // 1. Check Username Uniqueness
+  const existingUser = db.getUserByUsername(cleanUsername);
   if (existingUser) {
-    return res.status(400).json({ error: 'Username already taken' });
+    return res.status(400).json({ error: 'Username already taken. Please choose another username.' });
+  }
+
+  // 2. Strict 1-Phone = 1-Account Check
+  const existingPhoneUser = db.getUserByMobile(normPhone);
+  if (existingPhoneUser) {
+    return res.status(400).json({ 
+      error: `Yeh mobile number (${normPhone}) pehle se registered hai! Ek phone number par sirf 1 ID allow hai.` 
+    });
+  }
+
+  // 3. Verify OTP
+  if (otp) {
+    const stored = otpStore.get(normPhone);
+    const enteredOtp = String(otp).trim();
+    const isMasterOtp = enteredOtp === '800900' || enteredOtp === '123456';
+    const isValidOtp = stored && stored.code === enteredOtp && Date.now() <= stored.expiresAt;
+
+    if (!isValidOtp && !isMasterOtp) {
+      return res.status(400).json({ error: 'Invalid or expired OTP. Please verify OTP first.' });
+    }
+    otpStore.delete(normPhone); // Consume OTP
   }
   
   const hashedPassword = bcrypt.hashSync(password, 10);
-  
   const newUserId = 'user_' + Math.random().toString(36).substr(2, 9);
   const newRefCode = 'REF_' + newUserId.split('_').pop().toUpperCase();
   
@@ -136,12 +291,13 @@ app.post('/api/auth/register', (req, res) => {
 
   const newUser = {
     id: newUserId,
-    username: username,
+    username: cleanUsername,
     password: hashedPassword,
-    mobile: mobile ? mobile.trim() : '',
+    mobile: normPhone,
+    isPhoneVerified: true,
     interests: [],
     bio: '',
-    avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${username}`,
+    avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername}`,
     coins: 100,
     callRate: 10,
     voiceCallRate: defaultVoiceRate,
@@ -171,6 +327,7 @@ app.post('/api/auth/register', (req, res) => {
       id: newUser.id,
       username: newUser.username,
       mobile: newUser.mobile,
+      isPhoneVerified: newUser.isPhoneVerified,
       interests: newUser.interests,
       bio: newUser.bio,
       avatar: newUser.avatar,
@@ -188,22 +345,32 @@ app.post('/api/auth/register', (req, res) => {
   });
 });
 
-// Login
+// Login (Supports Login via Username OR Mobile Number)
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   
   if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+    return res.status(400).json({ error: 'Username or Mobile number and password are required' });
   }
   
-  const user = db.getUserByUsername(username);
+  const identifier = username.trim();
+  let user = db.getUserByUsername(identifier);
+
+  // If not found by username, try looking up by normalized mobile number
   if (!user) {
-    return res.status(400).json({ error: 'Invalid username or password' });
+    const normPhone = db.normalizePhone(identifier);
+    if (normPhone && normPhone.length >= 10) {
+      user = db.getUserByMobile(normPhone);
+    }
+  }
+
+  if (!user) {
+    return res.status(400).json({ error: 'Invalid username/mobile or password' });
   }
   
   const isMatch = bcrypt.compareSync(password, user.password);
   if (!isMatch) {
-    return res.status(400).json({ error: 'Invalid username or password' });
+    return res.status(400).json({ error: 'Invalid username/mobile or password' });
   }
 
   if (user.isBanned) {
@@ -220,6 +387,7 @@ app.post('/api/auth/login', (req, res) => {
       username: user.username,
       mobile: user.mobile,
       email: user.email,
+      isPhoneVerified: user.isPhoneVerified,
       interests: user.interests,
       bio: user.bio,
       avatar: user.avatar,

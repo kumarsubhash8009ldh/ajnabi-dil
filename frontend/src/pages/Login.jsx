@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, User, AlertCircle, Sparkles, Download, Smartphone, Globe, Shield, ArrowRight } from 'lucide-react';
+import { Lock, User, AlertCircle, Sparkles, Download, Smartphone, Globe, Shield, ArrowRight, KeyRound } from 'lucide-react';
 import { apiRequest, setSession } from '../utils/api';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -10,20 +11,23 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
   const [logoTaps, setLogoTaps] = useState(0);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [successNotice, setSuccessNotice] = useState('');
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!username || !password) {
-      setError('Please fill in all fields');
+      setError('Please enter your username/mobile and password');
       return;
     }
     
     setLoading(true);
     setError('');
+    setSuccessNotice('');
     
     try {
-      const response = await apiRequest('/api/auth/login', 'POST', { username, password });
+      const response = await apiRequest('/api/auth/login', 'POST', { username: username.trim(), password });
       setSession(response.token, response.user);
       navigate('/');
     } catch (err) {
@@ -112,10 +116,17 @@ export default function Login() {
             Dil Se Dil Ka Connection • Live Voice & Video
           </p>
 
+          {successNotice && (
+            <div className="w-full bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-2 mt-3 text-left">
+              <Sparkles size={16} className="shrink-0 text-amber-400" />
+              <span className="flex-1 text-[11px]">{successNotice}</span>
+            </div>
+          )}
+
           {error && (
-            <div className="w-full bg-red-950/60 border border-red-500/40 text-red-300 text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-2 mt-4 text-left">
+            <div className="w-full bg-red-950/60 border border-red-500/40 text-red-300 text-xs px-3.5 py-2.5 rounded-2xl flex items-center gap-2 mt-3 text-left">
               <AlertCircle size={16} className="shrink-0 text-red-400" />
-              <span className="flex-1">{error}</span>
+              <span className="flex-1 text-[11px]">{error}</span>
             </div>
           )}
 
@@ -123,7 +134,7 @@ export default function Login() {
           <form onSubmit={handleLogin} className="w-full flex flex-col gap-3 mt-4">
             <div className="flex flex-col gap-1 text-left">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">
-                Username
+                Username or Mobile Number
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
@@ -134,16 +145,25 @@ export default function Login() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder="Username or 10-digit Mobile"
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-900/80 border border-slate-700/80 focus:border-pink-500 rounded-2xl text-white placeholder-slate-500 text-xs font-medium outline-none transition-colors"
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-1 text-left">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">
-                Password
-              </label>
+              <div className="flex justify-between items-center pl-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-[10px] font-bold text-pink-400 hover:text-pink-300 hover:underline transition-colors"
+                >
+                  Forgot Password? (OTP)
+                </button>
+              </div>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                   <Lock size={16} />
@@ -182,6 +202,15 @@ export default function Login() {
             </button>
           </div>
         </div>
+
+        {/* Forgot Password OTP Modal */}
+        <ForgotPasswordModal
+          isOpen={showForgotModal}
+          onClose={() => setShowForgotModal(false)}
+          onSuccess={() => {
+            setSuccessNotice('Password reset successful! Please enter your new password to login.');
+          }}
+        />
 
         {/* Bottom Footer */}
         <div className="text-center z-10 pt-2 border-t border-white/5">
