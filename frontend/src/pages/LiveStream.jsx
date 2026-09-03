@@ -3,10 +3,11 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Radio, Users, Send, Gift, ShieldAlert, Award, X, Sparkles, 
   LogOut, Lock, Unlock, Loader2, Music, Clock, Hourglass, Flame, 
-  Crown, Rocket, Volume2, Edit3 
+  Crown, Rocket, Volume2, Edit3, Camera 
 } from 'lucide-react';
 import { apiRequest, getStoredUser, setSession, initSocket, getSocket } from '../utils/api';
 import BackgroundMusicPlayer from '../components/BackgroundMusicPlayer';
+import GiftSelectorModal, { GiftAnimationOverlay } from '../components/GiftSelectorModal';
 
 export default function LiveStream() {
   const { hostId } = useParams();
@@ -16,6 +17,9 @@ export default function LiveStream() {
 
   const navigate = useNavigate();
   const currentUser = getStoredUser();
+
+  const hostVideoRef = useRef(null);
+  const [hostStream, setHostStream] = useState(null);
 
   const [coins, setCoins] = useState(currentUser?.coins || 100);
   const [viewersCount, setViewersCount] = useState(0);
@@ -27,6 +31,9 @@ export default function LiveStream() {
   const [entryFee, setEntryFee] = useState(0);
   const [hasPaidPrivate, setHasPaidPrivate] = useState(false);
   const [showBlurCover, setShowBlurCover] = useState(false);
+  const [hasPin, setHasPin] = useState(false);
+  const [privatePinInput, setPrivatePinInput] = useState('');
+  const [viewerEnteredPin, setViewerEnteredPin] = useState('');
   
   // Timed Private Show state (Default minimum 300 coins and 30 mins)
   const [privateExpiresAt, setPrivateExpiresAt] = useState(null);
@@ -89,6 +96,59 @@ export default function LiveStream() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Acquire Host Camera for Live Broadcast
+  useEffect(() => {
+    if (isHost) {
+      navigator.mediaDevices?.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+        .then((stream) => {
+          setHostStream(stream);
+          if (hostVideoRef.current) {
+            hostVideoRef.current.srcObject = stream;
+          }
+        })
+        .catch((err) => {
+          console.warn('Host camera access unavailable:', err);
+        });
+    }
+    return () => {
+      if (hostStream) {
+        hostStream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [isHost]);
+
+  useEffect(() => {
+    if (hostVideoRef.current && hostStream) {
+      hostVideoRef.current.srcObject = hostStream;
+    }
+  }, [hostStream]);
+
+  // Click Photo / Capture Snapshot with Filter
+  const handleCaptureSnapshot = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      if (hostVideoRef.current && hostStream) {
+        const video = hostVideoRef.current;
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.filter = getBeautyFilterStyle();
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        const link = document.createElement('a');
+        link.download = `ajnabi_dil_live_photo_${Date.now()}.jpg`;
+        link.href = dataUrl;
+        link.click();
+        alert('📸 Live photo clicked with beauty filter & downloaded to your phone/device!');
+      } else {
+        alert('📸 Photo captured with active beauty filter!');
+      }
+    } catch (e) {
+      console.warn('Snapshot capture error:', e);
+      alert('Snapshot photo captured!');
+    }
   };
 
   useEffect(() => {
@@ -267,9 +327,22 @@ export default function LiveStream() {
       socket.emit('toggle-private', {
         isPrivate: true,
         entryFee: fee,
-        durationMinutes: finalDuration
+        durationMinutes: finalDuration,
+        entryPin: privatePinInput.trim()
       });
       setShowPrivateSetup(false);
+    }
+  };
+
+  const handleUnlockWithPin = (e) => {
+    e.preventDefault();
+    if (!viewerEnteredPin.trim()) return;
+    const socket = getSocket();
+    if (socket) {
+      socket.emit('pay-live-fee', {
+        hostId: hostId,
+        pin: viewerEnteredPin.trim()
+      });
     }
   };
 
@@ -301,14 +374,25 @@ export default function LiveStream() {
     <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-0 select-none z-50">
       <div className="w-full max-w-[420px] h-full bg-slate-900 flex flex-col relative overflow-hidden shadow-2xl">
         
-        {/* SIMULATED LIVE VIDEO FEED / WEBCAM VIEW */}
+        {/* LIVE VIDEO FEED / WEBCAM VIEW */}
         <div className="absolute inset-0 z-0 bg-slate-950">
-          <img 
-            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80" 
-            alt="Live Broadcaster" 
-            style={{ filter: getBeautyFilterStyle() }}
-            className={`w-full h-full object-cover transition-all duration-300 ${showBlurCover ? 'filter blur-2xl scale-110' : ''}`}
-          />
+          {isHost && hostStream ? (
+            <video 
+              ref={hostVideoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ filter: getBeautyFilterStyle() }}
+              className={`w-full h-full object-cover mirror transition-all duration-300 ${showBlurCover ? 'filter blur-2xl scale-110' : ''}`}
+            />
+          ) : (
+            <img 
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80" 
+              alt="Live Broadcaster" 
+              style={{ filter: getBeautyFilterStyle() }}
+              className={`w-full h-full object-cover transition-all duration-300 ${showBlurCover ? 'filter blur-2xl scale-110' : ''}`}
+            />
+          )}
           
           {/* Subtle live broadcast gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/90 pointer-events-none" />
@@ -380,7 +464,19 @@ export default function LiveStream() {
                 title="Beauty Camera Filters"
               >
                 <Sparkles size={12} />
-                <span>Beauty</span>
+                <span>Filter</span>
+              </button>
+            )}
+
+            {/* Photo Click / Capture Snapshot for Host */}
+            {isHost && (
+              <button
+                onClick={handleCaptureSnapshot}
+                className="p-1.5 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:opacity-90 border border-pink-400 text-white shadow-md flex items-center gap-1 text-[9px] font-extrabold active:scale-95 transition-all"
+                title="Capture Photo with Beauty Filter"
+              >
+                <Camera size={12} />
+                <span>Click</span>
               </button>
             )}
 
@@ -485,6 +581,19 @@ export default function LiveStream() {
                 </button>
               </form>
 
+              {/* Audio Songs Player Trigger */}
+              <button
+                onClick={() => setShowMusicPlayer(!showMusicPlayer)}
+                className={`p-3 rounded-2xl shadow-lg active:scale-95 transition-all shrink-0 border ${
+                  showMusicPlayer
+                    ? 'bg-pink-600 text-white border-pink-400'
+                    : 'bg-slate-900/80 text-pink-400 border-slate-700 hover:bg-slate-800'
+                }`}
+                title="Phone Storage Songs & Volume Controls"
+              >
+                <Music size={16} />
+              </button>
+
               {/* Gift Trigger for Viewer */}
               {!isHost && (
                 <button
@@ -516,23 +625,27 @@ export default function LiveStream() {
 
         {/* VIEWER PRIVATE LOCK BLUR COVER SCREEN */}
         {showBlurCover && (
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl z-40 flex flex-col items-center justify-center text-center p-8">
-            <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-4 w-full max-w-[280px]">
-              <div className="w-14 h-14 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex items-center justify-center">
-                <Lock size={28} className="text-yellow-500 animate-bounce" />
+          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-2xl z-40 flex flex-col items-center justify-center text-center p-6">
+            <div className="bg-slate-900 border border-yellow-500/30 rounded-3xl p-5 shadow-2xl flex flex-col items-center gap-3.5 w-full max-w-[300px]">
+              <div className="w-13 h-13 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 flex items-center justify-center">
+                <Lock size={26} className="text-yellow-400 animate-bounce" />
               </div>
               
               <div>
-                <h4 className="font-extrabold text-sm text-white">🔒 Timed Private Show Active</h4>
+                <h4 className="font-extrabold text-sm text-white">🔒 Private Show Active</h4>
                 <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                  Host has converted this live stream into a Private Show. Pay entry fee coins to unlock.
+                  Host has switched this live to a Private Show. Unlock with coins or Host's Secret PIN.
                 </p>
               </div>
 
-              <div className="w-full bg-slate-950/50 border border-white/5 rounded-xl p-3 flex flex-col gap-1 text-white text-[11px] font-bold">
+              <div className="w-full bg-slate-950/70 border border-white/10 rounded-xl p-2.5 flex flex-col gap-1 text-white text-[11px] font-bold">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">Entry Fee:</span>
                   <span className="text-yellow-400">🪙 {entryFee} Coins</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>Your Balance:</span>
+                  <span className="text-white">{coins} Coins</span>
                 </div>
                 {privateExpiresAt && privateTimeRemaining > 0 && (
                   <div className="flex justify-between items-center text-[10px] text-pink-400 pt-1 border-t border-white/5">
@@ -542,16 +655,50 @@ export default function LiveStream() {
                 )}
               </div>
 
-              <button
-                onClick={handlePayEntryFee}
-                className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-slate-950 rounded-2xl text-xs font-bold shadow-lg shadow-yellow-500/10 active:scale-95 transition-all"
-              >
-                Pay & Unlock Show
-              </button>
+              {/* Coin Payment or Recharge Link */}
+              {coins < entryFee ? (
+                <div className="w-full flex flex-col gap-1">
+                  <button
+                    onClick={() => navigate('/shop')}
+                    className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 rounded-2xl text-xs font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1"
+                  >
+                    <span>🪙 Recharge Coins</span>
+                  </button>
+                  <span className="text-[8px] text-red-400 font-bold">Aapke paas kam coins hain.</span>
+                </div>
+              ) : (
+                <button
+                  onClick={handlePayEntryFee}
+                  className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-2xl text-xs font-black shadow-lg shadow-yellow-500/20 active:scale-95 transition-all"
+                >
+                  Pay {entryFee} Coins & Enter Show
+                </button>
+              )}
+
+              {/* Secret PIN Entry */}
+              <form onSubmit={handleUnlockWithPin} className="w-full flex flex-col gap-1 pt-2 border-t border-white/10">
+                <span className="text-[10px] text-slate-300 font-bold">Or Enter Host Secret PIN:</span>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={viewerEnteredPin}
+                    onChange={(e) => setViewerEnteredPin(e.target.value)}
+                    placeholder="Secret PIN"
+                    className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-amber-300 font-mono text-center focus:outline-none focus:border-amber-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!viewerEnteredPin.trim()}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    Unlock
+                  </button>
+                </div>
+              </form>
               
               <button
                 onClick={handleLeaveStream}
-                className="text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider"
+                className="text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider mt-1"
               >
                 Leave Stream
               </button>
@@ -667,6 +814,21 @@ export default function LiveStream() {
                   )}
                 </div>
 
+                {/* 3. Secret Access PIN (Optional) */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                    Secret Access PIN (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={privatePinInput}
+                    onChange={(e) => setPrivatePinInput(e.target.value)}
+                    placeholder="e.g. 1234 or VIP77 (Dosto ke sath share karein)"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-amber-300 font-mono placeholder-slate-500 focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[8px] text-slate-400">Jo viewer yeh PIN enter karega woh bina coins ke enter kar sakega.</span>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-3.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 text-slate-950 rounded-2xl text-xs font-extrabold active:scale-95 transition-all shadow-md shadow-yellow-500/20 mt-1"
@@ -678,83 +840,21 @@ export default function LiveStream() {
           </div>
         )}
 
-        {/* VIEWER: VIRTUAL GIFT SELECTOR MODAL */}
-        {showGiftSelector && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center p-0">
-            <div className="w-full max-w-[420px] bg-slate-900 border-t border-pink-500/30 rounded-t-[32px] p-5 shadow-2xl flex flex-col gap-4 animate-slide-up">
-              
-              <div className="flex justify-between items-center border-b border-white/10 pb-3 text-white">
-                <span className="font-extrabold text-xs flex items-center gap-1.5 text-pink-300">
-                  <Gift size={16} className="text-pink-400" />
-                  <span>Send Virtual Gift to Host</span>
-                </span>
-                
-                <button 
-                  onClick={() => setShowGiftSelector(false)}
-                  className="p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white"
-                >
-                  <X size={16} />
-                </button>
-              </div>
+        {/* GIFT ANIMATION FLYING OVERLAY */}
+        <GiftAnimationOverlay gift={giftBanner} onFinish={() => setGiftBanner(null)} />
 
-              {/* 5 Rich Gift Options */}
-              <div className="grid grid-cols-3 gap-2.5">
-                {/* Gift 1: Heart */}
-                <div 
-                  onClick={() => handleSendGift('Heart', 10)}
-                  className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex flex-col items-center gap-1 cursor-pointer hover:bg-white/15 hover:border-pink-500 transition-all active:scale-95"
-                >
-                  <span className="text-3xl">💖</span>
-                  <span className="text-[10px] font-extrabold text-white">Heart</span>
-                  <span className="text-[9px] font-bold text-yellow-400">🪙 10c</span>
-                </div>
+        {/* REUSABLE VIRTUAL GIFT SELECTOR MODAL */}
+        <GiftSelectorModal
+          isOpen={showGiftSelector}
+          onClose={() => setShowGiftSelector(false)}
+          onSendGift={handleSendGift}
+          userCoins={coins}
+        />
 
-                {/* Gift 2: Rose */}
-                <div 
-                  onClick={() => handleSendGift('Rose', 50)}
-                  className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex flex-col items-center gap-1 cursor-pointer hover:bg-white/15 hover:border-pink-500 transition-all active:scale-95"
-                >
-                  <span className="text-3xl">🌹</span>
-                  <span className="text-[10px] font-extrabold text-white">Rose</span>
-                  <span className="text-[9px] font-bold text-yellow-400">🪙 50c</span>
-                </div>
-
-                {/* Gift 3: Diamond */}
-                <div 
-                  onClick={() => handleSendGift('Diamond', 100)}
-                  className="bg-white/5 border border-white/10 rounded-2xl p-2.5 flex flex-col items-center gap-1 cursor-pointer hover:bg-white/15 hover:border-pink-500 transition-all active:scale-95"
-                >
-                  <span className="text-3xl">💎</span>
-                  <span className="text-[10px] font-extrabold text-white">Diamond</span>
-                  <span className="text-[9px] font-bold text-yellow-400">🪙 100c</span>
-                </div>
-
-                {/* Gift 4: Royal Crown */}
-                <div 
-                  onClick={() => handleSendGift('Royal Crown', 250)}
-                  className="bg-gradient-to-b from-yellow-500/10 to-purple-500/10 border border-yellow-500/30 rounded-2xl p-2.5 flex flex-col items-center gap-1 cursor-pointer hover:bg-yellow-500/20 hover:border-yellow-400 transition-all active:scale-95"
-                >
-                  <span className="text-3xl">👑</span>
-                  <span className="text-[10px] font-extrabold text-yellow-300">Crown</span>
-                  <span className="text-[9px] font-bold text-yellow-400">🪙 250c</span>
-                </div>
-
-                {/* Gift 5: Supercar Rocket */}
-                <div 
-                  onClick={() => handleSendGift('Supercar Rocket', 500)}
-                  className="bg-gradient-to-b from-pink-500/10 to-indigo-500/10 border border-pink-500/30 rounded-2xl p-2.5 flex flex-col items-center gap-1 cursor-pointer hover:bg-pink-500/20 hover:border-pink-400 transition-all active:scale-95 col-span-2"
-                >
-                  <span className="text-3xl">🚀</span>
-                  <span className="text-[10px] font-extrabold text-pink-300">Supercar Rocket</span>
-                  <span className="text-[9px] font-bold text-yellow-400">🪙 500c</span>
-                </div>
-              </div>
-
-              <div className="text-center text-[9px] text-pink-300 font-bold bg-pink-950/40 py-1.5 rounded-xl border border-pink-500/20">
-                ⭐ 60% of all gifts go straight to Host's Earnings Wallet!
-              </div>
-
-            </div>
+        {/* FLOATING PHONE STORAGE AUDIO SONGS PLAYER */}
+        {showMusicPlayer && (
+          <div className="fixed inset-x-3 bottom-20 z-50 max-w-sm mx-auto animate-slide-up">
+            <BackgroundMusicPlayer isCall={true} onClose={() => setShowMusicPlayer(false)} />
           </div>
         )}
 

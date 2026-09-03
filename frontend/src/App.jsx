@@ -19,6 +19,27 @@ import LiveLobby from './pages/LiveLobby';
 import LiveStream from './pages/LiveStream';
 import HelpDesk from './pages/HelpDesk';
 import Calls from './pages/Calls';
+import UnifiedInbox from './pages/UnifiedInbox';
+import GlobalNotificationToast from './components/GlobalNotificationToast';
+import { CallProvider, useCall } from './context/CallContext';
+import CallScreen from './components/CallScreen';
+
+// Global Call Screen Overlay (renders on ANY screen when an incoming/outgoing/active call happens)
+function GlobalCallOverlay() {
+  const { callState, callTime, userCoins, acceptCall, rejectCall, endCall } = useCall();
+  if (callState.status === 'idle') return null;
+
+  return (
+    <CallScreen
+      callState={callState}
+      callTime={callTime}
+      coins={userCoins}
+      onAccept={acceptCall}
+      onReject={rejectCall}
+      onHangup={endCall}
+    />
+  );
+}
 
 // Protected Route Wrapper Component
 const ProtectedRoute = ({ children }) => {
@@ -35,8 +56,11 @@ const PublicRoute = ({ children }) => {
 function App() {
   return (
     <ErrorBoundary>
-      <Router>
-        <Routes>
+      <CallProvider>
+        <Router>
+          <GlobalNotificationToast />
+          <GlobalCallOverlay />
+          <Routes>
         {/* Public & Download Routes */}
         <Route path="/download" element={<DownloadPage />} />
         <Route path="/download-apk" element={<DownloadPage />} />
@@ -88,9 +112,21 @@ function App() {
           path="/chats" 
           element={
             <ProtectedRoute>
-              <DirectMessages />
+              <UnifiedInbox />
             </ProtectedRoute>
           } 
+        />
+        <Route 
+          path="/inbox" 
+          element={
+            <ProtectedRoute>
+              <UnifiedInbox />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/stranger" 
+          element={<Navigate to="/" replace />} 
         />
         <Route 
           path="/chat/dm/:otherUserId" 
@@ -138,6 +174,10 @@ function App() {
           element={<AdminPanel />} 
         />
         <Route 
+          path="/master-admin" 
+          element={<AdminPanel />} 
+        />
+        <Route 
           path="/master" 
           element={<AdminPanel />} 
         />
@@ -178,6 +218,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </CallProvider>
   </ErrorBoundary>
   );
 }

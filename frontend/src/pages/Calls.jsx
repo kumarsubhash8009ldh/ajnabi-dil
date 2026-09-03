@@ -4,9 +4,9 @@ import {
   Phone, Video, MessageSquare, Award, Sparkles, Wifi, 
   Settings, Check, Search, Radio, Sliders, ShieldCheck, Flame
 } from 'lucide-react';
-import { apiRequest, getSocket, getStoredUser, initSocket, setSession } from '../utils/api';
+import { apiRequest, getStoredUser } from '../utils/api';
 import MobileLayout from '../components/MobileLayout';
-import CallScreen from '../components/CallScreen';
+import { useCall } from '../context/CallContext';
 
 export default function Calls() {
   const [users, setUsers] = useState([]);
@@ -14,17 +14,11 @@ export default function Calls() {
   const [userCoins, setUserCoins] = useState(100);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all', 'partners', 'video', 'audio'
+  const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isReceivingCalls, setIsReceivingCalls] = useState(true);
 
-  // Calling States
-  const [callState, setCallState] = useState({
-    status: 'idle', // 'idle', 'calling', 'ringing', 'active'
-    type: 'audio', // 'audio', 'video'
-    otherUser: null,
-    isCaller: false
-  });
+  const { startCall } = useCall();
 
   const navigate = useNavigate();
 
@@ -51,192 +45,8 @@ export default function Calls() {
     return () => clearInterval(interval);
   }, []);
 
-  // Setup Real-time Calling Socket listeners on Calls page
-  useEffect(() => {
-    let isMounted = true;
-    const socket = initSocket();
-
-    if (socket) {
-      socket.on('incoming-call', (data) => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'ringing',
-          type: data.type,
-          otherUser: {
-            id: data.callerId,
-            username: data.callerName,
-            avatar: data.callerAvatar
-          },
-          isCaller: false
-        });
-      });
-
-      socket.on('call-accepted', () => {
-        if (!isMounted) return;
-        setCallState((prev) => ({
-          ...prev,
-          status: 'active'
-        }));
-      });
-
-      socket.on('call-rejected', () => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-        alert('Call was declined');
-      });
-
-      socket.on('call-ended', () => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-      });
-
-      socket.on('call-failed', (data) => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-        alert(`Call failed: ${data.reason || 'User busy'}`);
-      });
-    }
-
-    return () => {
-      isMounted = false;
-      if (socket) {
-        socket.off('incoming-call');
-        socket.off('call-accepted');
-        socket.off('call-rejected');
-        socket.off('call-ended');
-        socket.off('call-failed');
-      }
-    };
-  }, []);
-
-  // Periodic coin deduction for caller during active call
-  useEffect(() => {
-    let interval = null;
-    const rate = callState.type === 'video' 
-      ? (callState.otherUser?.videoCallRate || 20) 
-      : (callState.otherUser?.voiceCallRate || 10);
-    
-    if (callState.status === 'active' && callState.isCaller && callState.otherUser) {
-      interval = setInterval(async () => {
-        try {
-          const response = await apiRequest('/api/wallet/deduct', 'POST', { 
-            coins: rate, 
-            receiverId: callState.otherUser.id 
-          });
-          
-          setUserCoins(response.coins);
-          const token = localStorage.getItem('chitchat_token');
-          const storedUser = getStoredUser();
-          setSession(token, { ...storedUser, coins: response.coins });
-          
-          if (response.coins < rate) {
-            clearInterval(interval);
-            const socket = getSocket();
-            if (socket) {
-              socket.emit('insufficient-coins-end', { otherUserId: callState.otherUser.id });
-            }
-            setCallState({
-              status: 'idle',
-              type: 'audio',
-              otherUser: null,
-              isCaller: false
-            });
-            alert('Call disconnected: Insufficient coins. Please recharge!');
-          }
-        } catch (err) {
-          console.error('Failed to deduct coins during call:', err);
-          handleHangupCall();
-        }
-      }, 10000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [callState.status, callState.isCaller, callState.otherUser, callState.type]);
-
   const handleStartDirectCall = (targetUser, type) => {
-    const rate = type === 'video' ? (targetUser.videoCallRate || 20) : (targetUser.voiceCallRate || 10);
-    if (userCoins < rate) {
-      const confirmRecharge = window.confirm(`⚠️ Insufficient coins (Minimum ${rate} Coins required for ${type} call). Would you like to recharge now?`);
-      if (confirmRecharge) {
-        navigate('/shop');
-      }
-      return;
-    }
-
-    const socket = getSocket();
-    if (socket) {
-      socket.emit('initiate-call', {
-        receiverId: targetUser.id,
-        type: type
-      });
-      
-      setCallState({
-        status: 'calling',
-        type: type,
-        otherUser: targetUser,
-        isCaller: true
-      });
-    }
-  };
-
-  const handleAcceptCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('accept-call', {
-        callerId: callState.otherUser.id
-      });
-      setCallState((prev) => ({
-        ...prev,
-        status: 'active'
-      }));
-    }
-  };
-
-  const handleRejectCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('reject-call', {
-        callerId: callState.otherUser.id
-      });
-      setCallState({
-        status: 'idle',
-        type: 'audio',
-        otherUser: null,
-        isCaller: false
-      });
-    }
-  };
-
-  const handleHangupCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('end-call', {
-        otherUserId: callState.otherUser.id
-      });
-    }
-    setCallState({
-      status: 'idle',
-      type: 'audio',
-      otherUser: null,
-      isCaller: false
-    });
+    startCall(targetUser, type);
   };
 
   // Filter Online and Calling Users
@@ -436,10 +246,10 @@ export default function Calls() {
                         {/* Custom Calling Rate Tags */}
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                            📞 {voiceRate} coin/sec
+                            📞 {user.voiceCallRate || 5}c/min
                           </span>
                           <span className="text-[9px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-lg">
-                            📹 {videoRate}c/10s
+                            📹 {user.videoCallRate || 8}c/min
                           </span>
                         </div>
                       </div>
@@ -482,18 +292,6 @@ export default function Calls() {
             })}
           </div>
         )}
-
-        {/* Direct CallScreen Overlay for Real-time Calls */}
-        {callState.status !== 'idle' && (
-          <CallScreen 
-            callState={callState}
-            coins={userCoins}
-            onAccept={handleAcceptCall}
-            onReject={handleRejectCall}
-            onHangup={handleHangupCall}
-          />
-        )}
-
       </div>
     </MobileLayout>
   );

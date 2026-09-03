@@ -22,9 +22,9 @@ export default function Profile() {
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [selectedInterests, setSelectedInterests] = useState([]);
-  const [callRate, setCallRate] = useState(10);
-  const [voiceCallRate, setVoiceCallRate] = useState(10);
-  const [videoCallRate, setVideoCallRate] = useState(20);
+  const [callRate, setCallRate] = useState(5);
+  const [voiceCallRate, setVoiceCallRate] = useState(5);
+  const [videoCallRate, setVideoCallRate] = useState(8);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -79,6 +79,36 @@ export default function Profile() {
   const panDocInputRef = useRef(null);
   const liveSelfieInputRef = useRef(null);
 
+  // Discreet Secret Master Admin Access (Hidden 5-Tap on App Version)
+  const [adminTapCount, setAdminTapCount] = useState(0);
+  const [showSecretAdminModal, setShowSecretAdminModal] = useState(false);
+  const [secretPinInput, setSecretPinInput] = useState('');
+  const [secretPinError, setSecretPinError] = useState('');
+
+  const handleSecretAdminTap = () => {
+    const nextCount = adminTapCount + 1;
+    if (nextCount >= 5) {
+      setAdminTapCount(0);
+      setShowSecretAdminModal(true);
+      setSecretPinInput('');
+      setSecretPinError('');
+    } else {
+      setAdminTapCount(nextCount);
+      setTimeout(() => setAdminTapCount(0), 3000);
+    }
+  };
+
+  const handleVerifySecretPin = (e) => {
+    e.preventDefault();
+    if (secretPinInput === '8009' || secretPinInput === 'admin8009' || secretPinInput === 'admin@123') {
+      sessionStorage.setItem('admin_master_unlocked', 'true');
+      setShowSecretAdminModal(false);
+      navigate('/master-admin');
+    } else {
+      setSecretPinError('Invalid Master Security PIN');
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
     fetchPosts();
@@ -94,9 +124,9 @@ export default function Profile() {
       setEmail(data.email || '');
       setMobile(data.mobile || '');
       setSelectedInterests(data.interests || []);
-      setCallRate(data.callRate !== undefined ? data.callRate : 10);
-      setVoiceCallRate(data.voiceCallRate !== undefined ? data.voiceCallRate : 10);
-      setVideoCallRate(data.videoCallRate !== undefined ? data.videoCallRate : 20);
+      setCallRate(data.callRate !== undefined ? data.callRate : 5);
+      setVoiceCallRate(data.voiceCallRate !== undefined ? data.voiceCallRate : 5);
+      setVideoCallRate(data.videoCallRate !== undefined ? data.videoCallRate : 8);
       setIncomingCalls(data.incomingCallsEnabled !== undefined ? data.incomingCallsEnabled : true);
       setFriendsOnly(data.friendsOnly !== undefined ? data.friendsOnly : false);
       if (data.coverPhoto) setCoverPhoto(data.coverPhoto);
@@ -110,26 +140,14 @@ export default function Profile() {
   const fetchPosts = async () => {
     try {
       const data = await apiRequest('/api/users/posts');
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setPosts(data);
       } else {
-        setPosts([
-          {
-            id: 'sample_p1',
-            imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-            caption: 'Good vibes only ✨ #AjnabiDil',
-            timestamp: '1d ago'
-          },
-          {
-            id: 'sample_p2',
-            imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80',
-            caption: 'Live stream moments 💖',
-            timestamp: '3d ago'
-          }
-        ]);
+        setPosts([]);
       }
     } catch (err) {
       console.warn('Could not fetch posts:', err);
+      setPosts([]);
     }
   };
 
@@ -436,14 +454,14 @@ export default function Profile() {
   }
 
   const userEarnings = profile ? profile.earnings : 0;
-  const flowersCount = profile?.flowers !== undefined ? profile.flowers : 54;
-  const followersCount = profile?.followersCount !== undefined ? profile.followersCount : 89;
-  const friendsCount = profile?.friendsCount !== undefined ? profile.friendsCount : 1;
-  const sessionsCount = profile?.sessionsCount !== undefined ? profile.sessionsCount : 24;
+  const flowersCount = profile?.flowers !== undefined ? Number(profile.flowers) : 0;
+  const followersCount = profile?.followersCount !== undefined ? Number(profile.followersCount) : 0;
+  const friendsCount = profile?.friendsCount !== undefined ? Number(profile.friendsCount) : 0;
+  const sessionsCount = profile?.sessionsCount !== undefined ? Number(profile.sessionsCount) : 0;
   const totalPostsCount = posts.length;
-  const goalHours = profile?.goalHours || 20;
-  const completedHours = profile?.completedGoalHours || 14.5;
-  const goalPercent = Math.min(100, Math.round((completedHours / goalHours) * 100));
+  const goalHours = Number(profile?.goalHours) || 0;
+  const completedHours = Number(profile?.completedGoalHours) || 0;
+  const goalPercent = goalHours > 0 ? Math.min(100, Math.round((completedHours / goalHours) * 100)) : 0;
 
   return (
     <MobileLayout title="Profile">
@@ -773,6 +791,16 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Discreet subtle app version tag with hidden 5-tap Master Admin access */}
+          <div className="w-full flex justify-center py-6 mt-2 opacity-35 hover:opacity-90 transition-opacity">
+            <span 
+              onClick={handleSecretAdminTap}
+              className="text-[10px] text-slate-500 font-mono select-none cursor-pointer tracking-widest"
+            >
+              Ajnabi Dil v2.5.0
+            </span>
+          </div>
+
         </div>
 
         {/* MODAL: SHARE REFERRAL & DOWNLINE MEMBER LIST */}
@@ -987,7 +1015,7 @@ export default function Profile() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">📞 Voice Call (Coins/10s)</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">📞 Voice Call (Coins/min)</label>
                     <input 
                       type="number" 
                       value={voiceCallRate} 
@@ -996,7 +1024,7 @@ export default function Profile() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">📹 Video Call (Coins/10s)</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">📹 Video Call (Coins/min)</label>
                     <input 
                       type="number" 
                       value={videoCallRate} 
@@ -1196,6 +1224,51 @@ export default function Profile() {
                 >
                   {withdrawLoading ? 'Processing Request...' : 'Submit Instant Withdrawal'}
                 </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* DISCREET SECRET MASTER ADMIN PIN PROMPT */}
+        {showSecretAdminModal && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-pink-500/40 rounded-3xl p-5 w-full max-w-xs flex flex-col gap-3 shadow-2xl text-center">
+              <div className="w-10 h-10 rounded-2xl bg-pink-500/20 text-pink-400 mx-auto flex items-center justify-center">
+                <Lock size={20} />
+              </div>
+              <h3 className="font-black text-sm text-white">Master Security Check</h3>
+              <p className="text-[11px] text-slate-400">Enter Security PIN to open Admin Portal</p>
+
+              <form onSubmit={handleVerifySecretPin} className="flex flex-col gap-2.5">
+                <input 
+                  type="password"
+                  autoFocus
+                  maxLength={10}
+                  placeholder="Enter PIN (8009)"
+                  value={secretPinInput}
+                  onChange={(e) => setSecretPinInput(e.target.value)}
+                  className="w-full text-center px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono tracking-widest text-white outline-none focus:border-pink-500"
+                />
+
+                {secretPinError && (
+                  <span className="text-[11px] font-bold text-red-400">{secretPinError}</span>
+                )}
+
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowSecretAdminModal(false)}
+                    className="flex-1 py-2 bg-slate-800 text-slate-400 rounded-xl text-xs font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-black shadow-md"
+                  >
+                    Unlock
+                  </button>
+                </div>
               </form>
             </div>
           </div>

@@ -2,7 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Sparkles, Phone, Video, Paperclip, Image, Music, Film, Copy, Trash2, Check } from 'lucide-react';
 import { apiRequest, getSocket, getStoredUser, initSocket, setSession } from '../utils/api';
-import CallScreen from '../components/CallScreen';
+import ChatInputBar from '../components/ChatInputBar';
+import VoiceNoteBubble from '../components/VoiceNoteBubble';
+import { useCall } from '../context/CallContext';
 
 export default function DMChat() {
   const { otherUserId } = useParams();
@@ -22,13 +24,7 @@ export default function DMChat() {
   const audioInputRef = useRef(null);
   const videoInputRef = useRef(null);
 
-  // Calling States
-  const [callState, setCallState] = useState({
-    status: 'idle', // 'idle', 'calling', 'ringing', 'active'
-    type: 'audio', // 'audio', 'video'
-    otherUser: null,
-    isCaller: false
-  });
+  const { startCall } = useCall();
 
   // Setup Chat & Socket Listeners
   useEffect(() => {
@@ -51,70 +47,6 @@ export default function DMChat() {
         if (isFromOther || isFromMe) {
           setMessages((prev) => [...prev, message]);
         }
-      });
-
-      // Listen for incoming call signals
-      socket.on('incoming-call', (data) => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'ringing',
-          type: data.type,
-          otherUser: {
-            id: data.callerId,
-            username: data.callerName,
-            avatar: data.callerAvatar
-          },
-          isCaller: false
-        });
-      });
-
-      // Listen for call accepted
-      socket.on('call-accepted', (data) => {
-        if (!isMounted) return;
-        setCallState((prev) => ({
-          ...prev,
-          status: 'active'
-        }));
-      });
-
-      // Listen for call rejected
-      socket.on('call-rejected', (data) => {
-        if (!isMounted) return;
-        alert(`Call declined: ${data.reason}`);
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-      });
-
-      // Listen for call ended
-      socket.on('call-ended', (data) => {
-        if (!isMounted) return;
-        if (data && data.reason === 'insufficient_coins') {
-          alert('Call ended: Caller ran out of coins.');
-        } else {
-          alert('Call ended.');
-        }
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-      });
-
-      // Listen for call failed
-      socket.on('call-failed', (data) => {
-        if (!isMounted) return;
-        alert(`Call failed: ${data.reason}`);
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
       });
 
       // Listen for message deletion
@@ -162,59 +94,10 @@ export default function DMChat() {
       isMounted = false;
       if (socket) {
         socket.off('receive-direct-message');
-        socket.off('incoming-call');
-        socket.off('call-accepted');
-        socket.off('call-rejected');
-        socket.off('call-ended');
-        socket.off('call-failed');
         socket.off('message-deleted');
       }
     };
   }, [otherUserId, navigate]);
-
-  // Periodic coin deduction for Caller during active call
-  useEffect(() => {
-    let interval = null;
-    const rate = callState.type === 'video' ? 20 : 10; // Video = 20 coins/10s, Voice = 1 coin/sec (10 coins/10s)
-    
-    if (callState.status === 'active' && callState.isCaller) {
-      interval = setInterval(async () => {
-        try {
-          // Deduct call rate coins
-          const response = await apiRequest('/api/wallet/deduct', 'POST', { coins: rate, receiverId: otherUserId });
-          
-          // Update local state and local storage
-          setUserCoins(response.coins);
-          const token = localStorage.getItem('chitchat_token');
-          const storedUser = getStoredUser();
-          setSession(token, { ...storedUser, coins: response.coins });
-          
-          // Check if coins are depleted for next tick
-          if (response.coins < rate) {
-            clearInterval(interval);
-            const socket = getSocket();
-            if (socket) {
-              socket.emit('insufficient-coins-end', { otherUserId: otherUserId });
-            }
-            setCallState({
-              status: 'idle',
-              type: 'audio',
-              otherUser: null,
-              isCaller: false
-            });
-            alert('Call disconnected: Insufficient coins. Please recharge!');
-          }
-        } catch (err) {
-          console.error('Failed to deduct coins during call:', err);
-          handleHangup();
-        }
-      }, 10000); // Ticks every 10 seconds for easy simulation
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [callState.status, callState.isCaller, otherUserId, callState.type]);
 
   const handleFileUpload = async (e, type) => {
     const file = e.target.files[0];
@@ -283,79 +166,24 @@ export default function DMChat() {
     }
   };
 
-  // --- CALLING ACTION FLOW HANDLERS ---
-
-  const handleStartCall = (type) => {
-    const rate = type === 'video' ? 20 : 10;
-    // Check if user has sufficient coins (Min required coins to initiate call)
-    if (userCoins < rate) {
-      const confirmRecharge = window.confirm(`Insufficient coins (Min ${rate} required to call). Would you like to recharge now?`);
-      if (confirmRecharge) {
-        navigate('/shop');
-      }
-      return;
-    }
-
+  const handleSendVoiceNote = (base64Audio, duration) => {
+    if (!base64Audio) return;
     const socket = getSocket();
     if (socket) {
-      socket.emit('initiate-call', {
+      socket.emit('send-direct-message', {
         receiverId: otherUserId,
-        type: type
-      });
-      
-      setCallState({
-        status: 'calling',
-        type: type,
-        otherUser: otherUser,
-        isCaller: true
+        content: `🎙️ Voice Note (${Math.floor(duration || 0)}s)`,
+        mediaType: 'audio',
+        fileUrl: base64Audio
       });
     }
   };
 
-  const handleAcceptCall = () => {
-    const socket = getSocket();
-    if (socket) {
-      socket.emit('accept-call', {
-        callerId: callState.otherUser.id
-      });
-      
-      setCallState((prev) => ({
-        ...prev,
-        status: 'active'
-      }));
+  // --- CALLING ACTION ---
+  const handleStartCall = (type) => {
+    if (otherUser) {
+      startCall(otherUser, type);
     }
-  };
-
-  const handleRejectCall = () => {
-    const socket = getSocket();
-    if (socket) {
-      socket.emit('reject-call', {
-        callerId: callState.otherUser.id
-      });
-      
-      setCallState({
-        status: 'idle',
-        type: 'audio',
-        otherUser: null,
-        isCaller: false
-      });
-    }
-  };
-
-  const handleHangup = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('hangup-call', {
-        otherUserId: callState.otherUser.id
-      });
-    }
-    
-    setCallState({
-      status: 'idle',
-      type: 'audio',
-      otherUser: null,
-      isCaller: false
-    });
   };
 
   const getSharedInterests = () => {
@@ -416,14 +244,14 @@ export default function DMChat() {
               <button 
                 onClick={() => handleStartCall('audio')}
                 className="p-2 hover:bg-primary-700 rounded-full transition-colors"
-                title="Voice Call (1 coin / sec)"
+                title="Voice Call (5 coins / min)"
               >
                 <Phone size={16} />
               </button>
               <button 
                 onClick={() => handleStartCall('video')}
                 className="p-2 hover:bg-primary-700 rounded-full transition-colors"
-                title="Video Call (20 coins / 10s)"
+                title="Video Call (8 coins / min)"
               >
                 <Video size={16} />
               </button>
@@ -499,7 +327,10 @@ export default function DMChat() {
                           />
                         )}
                         {msg.mediaType === 'audio' && (
-                          <audio src={fileUrl} controls className="max-w-[180px]" />
+                          <VoiceNoteBubble 
+                            audioUrl={fileUrl || msg.fileUrl} 
+                            isOwnMessage={isOwnMessage} 
+                          />
                         )}
                         {msg.mediaType === 'video' && (
                           <video src={fileUrl} controls className="max-w-[180px] rounded-xl max-h-[140px]" />
@@ -563,64 +394,17 @@ export default function DMChat() {
           className="hidden" 
         />
 
-        {/* Input Form */}
-        <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex gap-1.5 items-center z-30">
-          <div className="flex gap-0.5">
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => imageInputRef.current?.click()}
-              className="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-50 transition-colors disabled:opacity-50 shrink-0"
-              title="Share Image"
-            >
-              <Image size={15} />
-            </button>
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => audioInputRef.current?.click()}
-              className="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-50 transition-colors disabled:opacity-50 shrink-0"
-              title="Share Audio"
-            >
-              <Music size={15} />
-            </button>
-            <button
-              type="button"
-              disabled={uploading}
-              onClick={() => videoInputRef.current?.click()}
-              className="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-50 transition-colors disabled:opacity-50 shrink-0"
-              title="Share Video"
-            >
-              <Film size={15} />
-            </button>
-          </div>
-          
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder={uploading ? "Uploading file..." : `Message ${otherUser ? otherUser.username : ''}...`}
-            disabled={uploading}
-            className="flex-1 px-4 py-2.5 bg-slate-100 border border-slate-200 focus:border-primary-500 rounded-full text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white transition-colors disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={(!inputText.trim() && !uploading) || uploading}
-            className="w-9 h-9 bg-primary-600 hover:bg-primary-700 disabled:bg-slate-200 text-white rounded-full flex items-center justify-center shadow-md active:scale-95 disabled:scale-100 transition-all shrink-0"
-          >
-            <Send size={16} />
-          </button>
-        </form>
-
-        {/* Call Screen Overlay (displays calling screen if call state is active) */}
-        <CallScreen 
-          callState={callState}
-          onHangup={handleHangup}
-          onAccept={handleAcceptCall}
-          onReject={handleRejectCall}
-          coins={userCoins}
+        {/* Modern Multi-Language, Speech-to-Text & Voice Note Input Bar */}
+        <ChatInputBar
+          inputText={inputText}
+          setInputText={setInputText}
+          onSendMessage={handleSendMessage}
+          onSendVoiceNote={handleSendVoiceNote}
+          uploading={uploading}
+          imageInputRef={imageInputRef}
+          audioInputRef={audioInputRef}
+          videoInputRef={videoInputRef}
         />
-
       </div>
     </div>
   );

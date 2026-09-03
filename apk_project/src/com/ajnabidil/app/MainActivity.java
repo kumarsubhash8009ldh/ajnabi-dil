@@ -1,20 +1,24 @@
 package com.ajnabidil.app;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import java.io.InputStream;
 import java.io.IOException;
@@ -59,6 +63,24 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                Log.d(TAG, "Page started: " + url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                Log.d(TAG, "Page finished: " + url);
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                Log.e(TAG, "WebResourceError: " + error.getDescription() + " for " + request.getUrl());
+            }
+
+            @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (uri != null && ASSET_HOST.equalsIgnoreCase(uri.getHost())) {
@@ -71,6 +93,7 @@ public class MainActivity extends Activity {
                         }
                     }
 
+                    // Remove query parameters if present in path string
                     int queryIdx = path.indexOf('?');
                     if (queryIdx != -1) {
                         path = path.substring(0, queryIdx);
@@ -86,7 +109,7 @@ public class MainActivity extends Activity {
                         response.setResponseHeaders(headers);
                         return response;
                     } catch (IOException e) {
-                        Log.w(TAG, "Asset not found (" + path + "), fallback to index.html: " + e.getMessage());
+                        Log.w(TAG, "Asset not found (" + path + "), falling back to index.html: " + e.getMessage());
                         try {
                             InputStream stream = getAssets().open("index.html");
                             WebResourceResponse response = new WebResourceResponse("text/html", "UTF-8", stream);
@@ -96,7 +119,7 @@ public class MainActivity extends Activity {
                             response.setResponseHeaders(headers);
                             return response;
                         } catch (IOException ex) {
-                            Log.e(TAG, "Fatal: index.html missing: " + ex.getMessage());
+                            Log.e(TAG, "Fatal: index.html not found in assets: " + ex.getMessage());
                         }
                     }
                 }
@@ -117,12 +140,12 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                Log.d(TAG, "[JS] " + consoleMessage.message() + " (" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + ")");
+                Log.d(TAG, "[JS Console] " + consoleMessage.message() + " (" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + ")");
                 return true;
             }
         });
 
-        // Load through secure origin so ES modules and WebRTC execute perfectly
+        // Load the single-file bundled app securely
         webView.loadUrl("https://" + ASSET_HOST + "/index.html");
     }
 

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Users, MessageSquare, User, LogOut, Radio, Headphones, Phone, Share2 } from 'lucide-react';
 import { clearSession, getStoredUser } from '../utils/api';
@@ -127,15 +127,15 @@ export default function MobileLayout({ children, title }) {
             <Home size={20} className={isActive('/') ? 'scale-110 text-pink-400' : ''} />
             <span className="text-[9px]">Discover</span>
           </button>
-          
+
           <button 
-            onClick={() => navigate('/rooms')}
+            onClick={() => navigate('/inbox')}
             className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
-              isActive('/rooms') ? 'text-pink-400 font-bold' : 'text-slate-400 hover:text-slate-300'
+              isActive('/inbox') || isActive('/chats') ? 'text-pink-400 font-bold' : 'text-slate-400 hover:text-slate-300'
             }`}
           >
-            <Users size={20} className={isActive('/rooms') ? 'scale-110 text-pink-400' : ''} />
-            <span className="text-[9px]">Rooms</span>
+            <MessageSquare size={20} className={isActive('/inbox') || isActive('/chats') ? 'scale-110 text-pink-400' : ''} />
+            <span className="text-[9px]">Inbox Box</span>
           </button>
 
           <button 
@@ -144,18 +144,8 @@ export default function MobileLayout({ children, title }) {
               isActive('/calls') ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-300'
             }`}
           >
-            <Phone size={20} className={isActive('/calls') ? 'scale-110 text-emerald-400 animate-pulse' : ''} />
+            <Phone size={20} className={isActive('/calls') ? 'scale-110 text-emerald-400' : ''} />
             <span className="text-[9px]">Calls</span>
-          </button>
-          
-          <button 
-            onClick={() => navigate('/chats')}
-            className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition-all ${
-              isActive('/chats') || location.pathname.startsWith('/chat/dm/') ? 'text-pink-400 font-bold' : 'text-slate-400 hover:text-slate-300'
-            }`}
-          >
-            <MessageSquare size={20} className={isActive('/chats') ? 'scale-110 text-pink-400' : ''} />
-            <span className="text-[9px]">Chats</span>
           </button>
           
           <button 

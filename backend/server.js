@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const db = require('./db');
+const { detectPersonalContactLeak } = require('./contentFilter');
 
 const app = express();
 const server = http.createServer(app);
@@ -59,6 +60,10 @@ const onlineUsers = new Map();
 
 // Active Live Streams mapping (hostId -> stream details)
 const liveStreams = new Map();
+
+// Omegle-style Random Stranger Waiting Queue & Active Sessions
+const strangerQueue = [];
+const strangerSessions = new Map();
 
 // Helper middleware for JWT validation
 function authenticateToken(req, res, next) {
@@ -305,7 +310,7 @@ app.post('/api/auth/register', (req, res) => {
     });
   }
 
-  // 3. Verify OTP
+  // 3. Optional Mobile OTP Verification (Allows direct registration since SMS gateway is not connected)
   if (otp) {
     const stored = otpStore.get(normPhone);
     const enteredOtp = String(otp).trim();
@@ -313,7 +318,7 @@ app.post('/api/auth/register', (req, res) => {
     const isValidOtp = stored && stored.code === enteredOtp && Date.now() <= stored.expiresAt;
 
     if (!isValidOtp && !isMasterOtp) {
-      return res.status(400).json({ error: 'Invalid or expired OTP. Please verify OTP first.' });
+      return res.status(400).json({ error: 'Invalid or expired OTP.' });
     }
     otpStore.delete(normPhone); // Consume OTP
   }
@@ -335,8 +340,8 @@ app.post('/api/auth/register', (req, res) => {
     }
   }
 
-  const defaultVoiceRate = 10; // 10 coins / 10s (1 coin/sec)
-  const defaultVideoRate = 20; // 20 coins / 10s
+  const defaultVoiceRate = 5; // 5 coins / min
+  const defaultVideoRate = 8; // 8 coins / min
 
   const newUser = {
     id: newUserId,
@@ -348,7 +353,7 @@ app.post('/api/auth/register', (req, res) => {
     bio: '',
     avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${cleanUsername}`,
     coins: 100,
-    callRate: 10,
+    callRate: 5,
     voiceCallRate: defaultVoiceRate,
     videoCallRate: defaultVideoRate,
     isPartner: false,
@@ -367,7 +372,7 @@ app.post('/api/auth/register', (req, res) => {
   const tokenUser = { id: newUser.id, username: newUser.username };
   const token = jwt.sign(tokenUser, JWT_SECRET, { expiresIn: '7d' });
   
-  const welcomeIncomeMsg = `🎉 Welcome to Ajnabi Dil! You can earn up to 70% revenue share on Voice Calls (${newUser.voiceCallRate / 10 || 1} coin/sec), Video Calls (${newUser.videoCallRate || 20} coins/10s), Live Stream Private Shows (min 300 coins) and Virtual Gifts! Cashout earnings to Bank/UPI (Min Rs. 500). Complete Host KYC in Profile to start earning.`;
+  const welcomeIncomeMsg = `🎉 Welcome to Ajnabi Dil! You can earn up to 70% revenue share on Voice Calls (${newUser.voiceCallRate} coins/min), Video Calls (${newUser.videoCallRate} coins/min), Live Stream Private Shows (min 300 coins) and Virtual Gifts! Cashout earnings to Bank/UPI (Min Rs. 500). Complete Host KYC in Profile to start earning.`;
 
   res.status(201).json({
     token: token,
@@ -452,47 +457,10 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// One-Click Instant Guest / Web Demo Login (for Chrome & Browser visitors)
+// Guest / Web Demo Login (Disabled: Enforcing Mobile-Only Accounts)
 app.post('/api/auth/guest-login', (req, res) => {
-  let guestUsername = '';
-  let randomSuffix = '';
-  do {
-    randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    guestUsername = `Guest_${randomSuffix}`;
-  } while (db.getUserByUsername(guestUsername));
-
-  const guestId = `guest_${Date.now()}_${randomSuffix}`;
-  const guestPassword = bcrypt.hashSync(`guest_${randomSuffix}`, 10);
-  
-  const guestUser = {
-    id: guestId,
-    username: guestUsername,
-    password: guestPassword,
-    mobile: '',
-    email: '',
-    interests: ['Chat', 'Music'],
-    bio: 'Guest visitor exploring Ajnabi Dil ✨',
-    avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${guestUsername}`,
-    coins: 100,
-    callRate: 10,
-    voiceCallRate: 10,
-    videoCallRate: 20,
-    isPartner: false,
-    partnerId: null,
-    earnings: 0,
-    referralCode: `REF_${randomSuffix}`,
-    referralPoints: 0,
-    verificationStatus: 'none',
-    verificationDetails: null
-  };
-
-  db.saveUser(guestUser);
-  const token = jwt.sign({ id: guestUser.id, username: guestUser.username }, JWT_SECRET, { expiresIn: '7d' });
-
-  res.json({
-    token,
-    user: guestUser,
-    message: 'Logged in as Guest user'
+  return res.status(403).json({ 
+    error: 'Guest accounts disabled. Kripya apne mobile number se register ya login karein.' 
   });
 });
 
@@ -531,23 +499,23 @@ app.get('/api/users/profile', authenticateToken, (req, res) => {
     bio: user.bio,
     avatar: user.avatar,
     coins: user.coins,
-    callRate: user.callRate,
-    voiceCallRate: user.voiceCallRate || 10,
-    videoCallRate: user.videoCallRate || 20,
+    callRate: user.callRate !== undefined ? Number(user.callRate) : 5,
+    voiceCallRate: user.voiceCallRate !== undefined ? Number(user.voiceCallRate) : 5,
+    videoCallRate: user.videoCallRate !== undefined ? Number(user.videoCallRate) : 8,
     isPartner: user.isPartner,
     partnerId: user.partnerId,
-    earnings: user.earnings,
+    earnings: user.earnings || 0,
     referralCode: user.referralCode,
-    referralPoints: user.referralPoints,
+    referralPoints: user.referralPoints || 0,
     verificationStatus: user.verificationStatus,
     verificationDetails: user.verificationDetails,
-    flowers: user.flowers !== undefined ? user.flowers : 54,
-    followersCount: user.followersCount !== undefined ? user.followersCount : 89,
-    friendsCount: user.friendsCount !== undefined ? user.friendsCount : 1,
-    sessionsCount: user.sessionsCount !== undefined ? user.sessionsCount : 24,
-    rating: user.rating !== undefined ? user.rating : 4.9,
-    goalHours: user.goalHours !== undefined ? user.goalHours : 20,
-    completedGoalHours: user.completedGoalHours !== undefined ? user.completedGoalHours : 14.5,
+    flowers: Number(user.flowers) || 0,
+    followersCount: Number(user.followersCount) || 0,
+    friendsCount: Number(user.friendsCount) || 0,
+    sessionsCount: Number(user.sessionsCount) || 0,
+    rating: Number(user.rating) || 0,
+    goalHours: Number(user.goalHours) || 0,
+    completedGoalHours: Number(user.completedGoalHours) || 0,
     incomingCallsEnabled: user.incomingCallsEnabled !== undefined ? user.incomingCallsEnabled : true,
     friendsOnly: user.friendsOnly !== undefined ? user.friendsOnly : false,
     coverPhoto: user.coverPhoto || '/theme-bg.jpg'
@@ -748,9 +716,9 @@ app.get('/api/rooms/:roomId', authenticateToken, (req, res) => {
   res.json(room);
 });
 
-// Create a new room (public or private)
+// Create a new room (public or private with code & coin entry fee)
 app.post('/api/rooms', authenticateToken, (req, res) => {
-  const { name, description, isPrivate } = req.body;
+  const { name, description, isPrivate, entryCode, entryFee } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Room name is required' });
   }
@@ -760,11 +728,25 @@ app.post('/api/rooms', authenticateToken, (req, res) => {
     name: name,
     description: description || '',
     isPrivate: isPrivate === true,
+    entryCode: entryCode ? String(entryCode).trim() : null,
+    entryFee: Number(entryFee) || 0,
+    unlockedUsers: [req.user.id],
     creatorId: req.user.id
   };
   
   db.saveRoom(newRoom);
   res.status(201).json(newRoom);
+});
+
+// Unlock a private room using secret code and/or coin payment
+app.post('/api/rooms/:roomId/unlock', authenticateToken, (req, res) => {
+  const { roomId } = req.params;
+  const { code } = req.body;
+  const result = db.unlockRoom(roomId, req.user.id, code);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  res.json(result);
 });
 
 // Get room messages history
@@ -916,6 +898,7 @@ app.get('/api/admin/data', authenticateAdmin, (req, res) => {
       recharges,
       withdrawals,
       adminSettings,
+      activeLiveStreams: Array.from(liveStreams.values()),
       activeLiveStreamsCount: liveStreams.size,
       onlineUsersCount: onlineUsers.size
     });
@@ -947,7 +930,38 @@ app.post('/api/admin/users/update', authenticateAdmin, (req, res) => {
   res.json({ success: true, user });
 });
 
-// Admin User Management: Delete user account
+// Master Admin: Full User Edit (Username, Mobile, Password, Coins, Role, Ban)
+app.post('/api/admin/users/edit', authenticateAdmin, (req, res) => {
+  const { userId, username, mobile, password, coins, earnings, isBanned, isPartner, isAdmin, callRate, voiceCallRate, videoCallRate } = req.body;
+  if (!userId) return res.status(400).json({ error: 'User ID is required' });
+
+  const user = db.getUserById(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (username && username.trim()) user.username = username.trim();
+  if (mobile !== undefined) user.mobile = db.normalizePhone(mobile);
+  if (password && password.trim().length >= 4) {
+    user.password = bcrypt.hashSync(password.trim(), 10);
+  }
+  if (coins !== undefined) user.coins = Number(coins);
+  if (earnings !== undefined) user.earnings = Number(earnings);
+  if (isBanned !== undefined) user.isBanned = Boolean(isBanned);
+  if (isAdmin !== undefined) user.isAdmin = Boolean(isAdmin);
+  if (callRate !== undefined) user.callRate = Number(callRate);
+  if (voiceCallRate !== undefined) user.voiceCallRate = Number(voiceCallRate);
+  if (videoCallRate !== undefined) user.videoCallRate = Number(videoCallRate);
+  if (isPartner !== undefined) {
+    user.isPartner = Boolean(isPartner);
+    if (user.isPartner && !user.partnerId) {
+      user.partnerId = 'PT_' + Math.random().toString(36).substr(2, 6).toUpperCase();
+    }
+  }
+
+  db.saveUser(user);
+  res.json({ success: true, user });
+});
+
+// Master Admin: Delete User Account
 app.delete('/api/admin/users/:userId', authenticateAdmin, (req, res) => {
   const { userId } = req.params;
   const deleted = db.deleteUser(userId);
@@ -956,6 +970,32 @@ app.delete('/api/admin/users/:userId', authenticateAdmin, (req, res) => {
   } else {
     res.status(404).json({ error: 'User not found' });
   }
+});
+
+// Master Admin: Delete Chat Room
+app.delete('/api/admin/rooms/:roomId', authenticateAdmin, (req, res) => {
+  const { roomId } = req.params;
+  const deleted = db.deleteRoom(roomId);
+  if (deleted) {
+    io.to(roomId).emit('kicked-from-room', { roomId, reason: 'This room has been closed by Platform Admin.' });
+    io.emit('room-deleted', { roomId });
+    res.json({ success: true, message: 'Room deleted successfully' });
+  } else {
+    res.status(404).json({ error: 'Room not found' });
+  }
+});
+
+// Master Admin: Force End Active Live Stream
+app.post('/api/admin/live/terminate', authenticateAdmin, (req, res) => {
+  const { hostId } = req.body;
+  if (!hostId) return res.status(400).json({ error: 'Host ID is required' });
+  if (liveStreams.has(hostId)) {
+    io.to(`live_room_${hostId}`).emit('live-ended', { reason: 'Broadcast ended by Master Admin.' });
+    liveStreams.delete(hostId);
+    io.emit('live-list-updated', Array.from(liveStreams.values()));
+    return res.json({ success: true, message: 'Live stream terminated successfully' });
+  }
+  res.status(404).json({ error: 'Live stream not found or already inactive' });
 });
 
 // Submit Partner application (Document verification)
@@ -1203,50 +1243,49 @@ app.get('/api/admin/settings', (req, res) => {
   const settings = db.getAdminSettings() || {};
   res.json({
     qrCodeUrl: settings.qrCodeUrl || '',
-    whatsappNumber: settings.whatsappNumber || '+91 9876543210',
+    whatsappNumber1: settings.whatsappNumber1 || settings.whatsappNumber || '+91 9876543211',
+    whatsappNumber2: settings.whatsappNumber2 || '+91 9876543212',
+    whatsappNumber3: settings.whatsappNumber3 || '+91 9876543213',
+    whatsappNumber: settings.whatsappNumber1 || settings.whatsappNumber || '+91 9876543211',
     supportEmail: settings.supportEmail || 'support@ajnabidil.com',
-    supportHours: settings.supportHours || '24x7 Live Help Desk',
+    supportHours: settings.supportHours || '8:00 AM – 10:00 PM (Daily)',
     helpText: settings.helpText || 'Official Ajnabi Dil Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
   });
 });
 
+// Public endpoint for help desk support info (With 3 WhatsApp numbers & 8am-10pm hours)
 app.get('/api/support/info', (req, res) => {
   const settings = db.getAdminSettings() || {};
   res.json({
     qrCodeUrl: settings.qrCodeUrl || '',
-    whatsappNumber: settings.whatsappNumber || '+91 9876543210',
+    whatsappNumber1: settings.whatsappNumber1 || settings.whatsappNumber || '+91 9876543211',
+    whatsappNumber2: settings.whatsappNumber2 || '+91 9876543212',
+    whatsappNumber3: settings.whatsappNumber3 || '+91 9876543213',
+    whatsappNumber: settings.whatsappNumber1 || settings.whatsappNumber || '+91 9876543211',
     supportEmail: settings.supportEmail || 'support@ajnabidil.com',
-    supportHours: settings.supportHours || '24x7 Live Help Desk',
-    helpText: settings.helpText || 'Official Ajnabi Dil Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
+    supportHours: settings.supportHours || '8:00 AM – 10:00 PM (Daily)',
+    helpText: settings.helpText || 'Official Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
   });
 });
 
 // Update support & payment settings (Admin Only)
 app.put('/api/admin/settings', authenticateAdmin, (req, res) => {
-  const { whatsappNumber, supportEmail, supportHours, helpText } = req.body;
+  const { whatsappNumber1, whatsappNumber2, whatsappNumber3, whatsappNumber, supportEmail, supportHours, helpText } = req.body;
   const currentSettings = db.getAdminSettings() || {};
   
   const updatedSettings = {
     ...currentSettings,
-    whatsappNumber: whatsappNumber !== undefined ? whatsappNumber.trim() : (currentSettings.whatsappNumber || '+91 9876543210'),
+    whatsappNumber1: whatsappNumber1 !== undefined ? whatsappNumber1.trim() : (currentSettings.whatsappNumber1 || currentSettings.whatsappNumber || '+91 9876543211'),
+    whatsappNumber2: whatsappNumber2 !== undefined ? whatsappNumber2.trim() : (currentSettings.whatsappNumber2 || '+91 9876543212'),
+    whatsappNumber3: whatsappNumber3 !== undefined ? whatsappNumber3.trim() : (currentSettings.whatsappNumber3 || '+91 9876543213'),
+    whatsappNumber: whatsappNumber1 !== undefined ? whatsappNumber1.trim() : (whatsappNumber !== undefined ? whatsappNumber.trim() : currentSettings.whatsappNumber || '+91 9876543211'),
     supportEmail: supportEmail !== undefined ? supportEmail.trim() : (currentSettings.supportEmail || 'support@ajnabidil.com'),
-    supportHours: supportHours !== undefined ? supportHours.trim() : (currentSettings.supportHours || '24x7 Live Help Desk'),
+    supportHours: supportHours !== undefined ? supportHours.trim() : (currentSettings.supportHours || '8:00 AM – 10:00 PM (Daily)'),
     helpText: helpText !== undefined ? helpText.trim() : (currentSettings.helpText || 'Official Ajnabi Dil Help Desk.')
   };
 
   db.saveAdminSettings(updatedSettings);
   res.json({ success: true, settings: updatedSettings });
-});
-
-// Public endpoint for help desk support info
-app.get('/api/support/info', (req, res) => {
-  const settings = db.getAdminSettings() || {};
-  res.json({
-    whatsappNumber: settings.whatsappNumber || '+91 9876543210',
-    supportEmail: settings.supportEmail || 'support@ajnabidil.com',
-    supportHours: settings.supportHours || '24x7 Live Help Desk',
-    helpText: settings.helpText || 'Official Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
-  });
 });
 
 // Upload a new story
@@ -1300,6 +1339,27 @@ app.get('/api/live/streams', authenticateToken, (req, res) => {
   res.json(streams);
 });
 
+// --- UNIFIED INBOX & CALL ACTIVITY API ---
+app.get('/api/activity/summary', authenticateToken, (req, res) => {
+  res.json(db.getActivitySummary(req.user.id));
+});
+
+app.get('/api/calls/history', authenticateToken, (req, res) => {
+  res.json(db.getUserCallLogs(req.user.id));
+});
+
+app.post('/api/calls/log', authenticateToken, (req, res) => {
+  const log = db.saveCallLog({
+    ...req.body,
+    callerId: req.body.callerId || req.user.id
+  });
+  res.json({ success: true, log });
+});
+
+app.get('/api/conversations', authenticateToken, (req, res) => {
+  res.json(db.getUserConversations(req.user.id));
+});
+
 // --- SOCKET.IO REAL-TIME LOGIC ---
 const io = new Server(server, {
   cors: {
@@ -1341,6 +1401,33 @@ io.on('connection', (socket) => {
   socket.on('send-room-message', (data) => {
     const { roomId, content, mediaType, fileUrl } = data;
     if (!roomId || (!content && !fileUrl)) return;
+
+    if (db.isUserSuspended(userId)) {
+      socket.emit('account-suspended', {
+        reason: 'Aapka account community guidelines violations ke chalte suspend hai.'
+      });
+      return;
+    }
+
+    if (content) {
+      const violation = detectPersonalContactLeak(content);
+      if (violation.detected) {
+        const warnResult = db.addWarningToUser(userId, violation.type, violation.snippet);
+        socket.emit('policy-violation-warning', {
+          warningNumber: warnResult.warningNumber,
+          maxWarnings: 3,
+          violationType: violation.type,
+          snippet: violation.snippet,
+          message: warnResult.message,
+          reason: violation.reason,
+          isSuspended: warnResult.isSuspended
+        });
+        if (warnResult.isSuspended) {
+          socket.emit('account-suspended', { reason: warnResult.suspensionReason });
+        }
+        return; // Block message!
+      }
+    }
     
     const message = {
       id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -1356,11 +1443,91 @@ io.on('connection', (socket) => {
     db.saveRoomMessage(message);
     io.to(roomId).emit('receive-room-message', message);
   });
+
+  // Handle Room Theme Change by Admin
+  socket.on('update-room-theme', (data) => {
+    const { roomId, theme } = data;
+    if (!roomId || !theme) return;
+    io.to(roomId).emit('room-theme-updated', { roomId, theme, updatedBy: socket.user.username });
+  });
+
+  // Handle Room Music Control by Admin (Play, Pause, Song, Volume)
+  socket.on('room-music-control', (data) => {
+    const { roomId, action, songTitle, volume } = data;
+    if (!roomId) return;
+    io.to(roomId).emit('room-music-state', {
+      roomId,
+      action,
+      songTitle,
+      volume,
+      updatedBy: socket.user.username
+    });
+  });
+
+  // Handle Kick Out Room Member by Admin
+  socket.on('kick-room-member', (data) => {
+    const { roomId, targetUserId } = data;
+    if (!roomId || !targetUserId) return;
+    const targetSocketId = onlineUsers.get(targetUserId);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('kicked-from-room', {
+        roomId,
+        reason: 'Room creator/admin has removed you from this room.'
+      });
+    }
+    io.to(roomId).emit('room-member-kicked', {
+      roomId,
+      targetUserId,
+      kickedBy: socket.user.username
+    });
+  });
+
+  // Handle Room Member Invitation
+  socket.on('invite-room-member', (data) => {
+    const { roomId, roomName, targetUserId } = data;
+    if (!roomId || !targetUserId) return;
+    const targetSocketId = onlineUsers.get(targetUserId);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('room-invitation', {
+        roomId,
+        roomName: roomName || 'Chat Room',
+        senderName: socket.user.username,
+        senderAvatar: socket.user.avatar
+      });
+    }
+  });
   
   // Handle Direct Message
   socket.on('send-direct-message', (data) => {
     const { receiverId, content, mediaType, fileUrl } = data;
     if (!receiverId || (!content && !fileUrl)) return;
+
+    if (db.isUserSuspended(userId)) {
+      socket.emit('account-suspended', {
+        reason: 'Aapka account community guidelines violations ke chalte suspend hai.'
+      });
+      return;
+    }
+
+    if (content) {
+      const violation = detectPersonalContactLeak(content);
+      if (violation.detected) {
+        const warnResult = db.addWarningToUser(userId, violation.type, violation.snippet);
+        socket.emit('policy-violation-warning', {
+          warningNumber: warnResult.warningNumber,
+          maxWarnings: 3,
+          violationType: violation.type,
+          snippet: violation.snippet,
+          message: warnResult.message,
+          reason: violation.reason,
+          isSuspended: warnResult.isSuspended
+        });
+        if (warnResult.isSuspended) {
+          socket.emit('account-suspended', { reason: warnResult.suspensionReason });
+        }
+        return; // Block message!
+      }
+    }
     
     const message = {
       id: 'msg_' + Math.random().toString(36).substr(2, 9),
@@ -1378,10 +1545,39 @@ io.on('connection', (socket) => {
     const receiverSocketId = onlineUsers.get(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit('receive-direct-message', message);
+      io.to(receiverSocketId).emit('new-message-notification', {
+        id: message.id,
+        senderId: userId,
+        senderName: socket.user.username,
+        senderAvatar: socket.user.avatar,
+        content: message.content,
+        mediaType: message.mediaType,
+        timestamp: message.timestamp
+      });
     }
     
     // Also send back to sender's other tabs if any, or acknowledge
     socket.emit('receive-direct-message', message);
+  });
+
+  // Handle Voice Note Audio Speech Leak (When spoken audio contains phone numbers or personal ID)
+  socket.on('voice-note-audio-leak', (data) => {
+    const { transcript, violationType, snippet, reason } = data || {};
+    const warnResult = db.addWarningToUser(userId, violationType || 'VOICE_NOTE_LEAK', snippet || transcript);
+
+    socket.emit('policy-violation-warning', {
+      warningNumber: warnResult.warningNumber,
+      maxWarnings: 3,
+      violationType: violationType || 'VOICE_NOTE_LEAK',
+      snippet: snippet || transcript,
+      message: warnResult.message,
+      reason: reason || 'Voice note audio me phone number ya personal contact bolna mana hai.',
+      isSuspended: warnResult.isSuspended
+    });
+
+    if (warnResult.isSuspended) {
+      socket.emit('account-suspended', { reason: warnResult.suspensionReason });
+    }
   });
 
   // Handle Message Deletion
@@ -1407,7 +1603,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // --- REAL-TIME PAID CALL SIGNALS ---
+  // --- REAL-TIME CALL SIGNALS & LOGGING ---
   
   // 1. Caller initiates a call
   socket.on('initiate-call', (data) => {
@@ -1415,36 +1611,96 @@ io.on('connection', (socket) => {
     const receiverSocketId = onlineUsers.get(receiverId);
     
     if (receiverSocketId) {
+      const receiverUser = db.getUserById(receiverId);
       io.to(receiverSocketId).emit('incoming-call', {
         callerId: userId,
         callerName: socket.user.username,
         callerAvatar: socket.user.avatar,
-        type: type
+        callerVoiceRate: socket.user.voiceCallRate || 5,
+        callerVideoRate: socket.user.videoCallRate || 8,
+        receiverId: receiverId,
+        receiverName: receiverUser ? receiverUser.username : 'User',
+        receiverAvatar: receiverUser ? receiverUser.avatar : '',
+        type: type || 'video'
       });
+      socket.emit('call-ringing', { receiverId, type: type || 'video' });
       console.log(`Call initiated: ${socket.user.username} -> ${receiverId} (${type})`);
     } else {
       socket.emit('call-failed', { reason: 'User is offline' });
+      const receiverUser = db.getUserById(receiverId);
+      db.saveCallLog({
+        callerId: userId,
+        callerName: socket.user.username,
+        callerAvatar: socket.user.avatar,
+        receiverId: receiverId,
+        receiverName: receiverUser ? receiverUser.username : 'User',
+        receiverAvatar: receiverUser ? receiverUser.avatar : '',
+        type: type || 'video',
+        status: 'missed',
+        durationSeconds: 0
+      });
     }
   });
 
   // 2. Receiver accepts the call
   socket.on('accept-call', (data) => {
-    const { callerId } = data;
+    const { callerId, type } = data || {};
     const callerSocketId = onlineUsers.get(callerId);
     
     if (callerSocketId) {
+      const callerUser = db.getUserById(callerId);
       io.to(callerSocketId).emit('call-accepted', {
-        receiverId: userId
+        receiverId: userId,
+        receiverName: socket.user.username,
+        receiverAvatar: socket.user.avatar,
+        type: type || 'video'
+      });
+      socket.emit('call-started', {
+        otherUser: {
+          id: callerId,
+          username: callerUser ? callerUser.username : 'Caller',
+          avatar: callerUser ? callerUser.avatar : ''
+        },
+        type: type || 'video',
+        isCaller: false
       });
       console.log(`Call accepted by: ${userId} for caller: ${callerId}`);
     }
   });
 
-  // 3. Receiver rejects the call
+  // 3. WebRTC Peer Signal Exchange (Offer, Answer, ICE Candidates)
+  socket.on('call-signal', (data) => {
+    const { targetUserId, signal } = data || {};
+    if (!targetUserId || !signal) return;
+    const targetSocketId = onlineUsers.get(targetUserId);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('call-signal', {
+        signal,
+        fromUserId: userId
+      });
+    }
+  });
+
+  // 4. Receiver rejects the call
   socket.on('reject-call', (data) => {
-    const { callerId } = data;
+    const { callerId, type } = data || {};
     const callerSocketId = onlineUsers.get(callerId);
     
+    const callerUser = db.getUserById(callerId);
+    const receiverUser = socket.user || db.getUserById(userId);
+
+    db.saveCallLog({
+      callerId: callerId,
+      callerName: callerUser ? callerUser.username : 'User',
+      callerAvatar: callerUser ? callerUser.avatar : '',
+      receiverId: userId,
+      receiverName: receiverUser ? receiverUser.username : 'User',
+      receiverAvatar: receiverUser ? receiverUser.avatar : '',
+      type: type || 'audio',
+      status: 'declined',
+      durationSeconds: 0
+    });
+
     if (callerSocketId) {
       io.to(callerSocketId).emit('call-rejected', {
         reason: 'Call declined'
@@ -1453,18 +1709,37 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 4. Either hangs up
-  socket.on('hangup-call', (data) => {
-    const { otherUserId } = data;
+  // 5. Either hangs up or ends call
+  const handleCallTermination = (data) => {
+    const { otherUserId, duration, type, reason } = data || {};
     const otherSocketId = onlineUsers.get(otherUserId);
     
     if (otherSocketId) {
-      io.to(otherSocketId).emit('call-ended');
+      io.to(otherSocketId).emit('call-ended', { duration, reason });
     }
-    console.log(`Call hung up by: ${userId} with: ${otherUserId}`);
-  });
 
-  // 5. Triggered if coin wallet runs dry during call
+    if (otherUserId) {
+      const otherUser = db.getUserById(otherUserId);
+      const myUser = socket.user || db.getUserById(userId);
+      db.saveCallLog({
+        callerId: userId,
+        callerName: myUser ? myUser.username : 'User',
+        callerAvatar: myUser ? myUser.avatar : '',
+        receiverId: otherUserId,
+        receiverName: otherUser ? otherUser.username : 'User',
+        receiverAvatar: otherUser ? otherUser.avatar : '',
+        type: type || 'video',
+        status: (duration && Number(duration) > 0) ? 'completed' : 'missed',
+        durationSeconds: Number(duration) || 0
+      });
+    }
+    console.log(`Call ended by: ${userId} with: ${otherUserId}`);
+  };
+
+  socket.on('hangup-call', handleCallTermination);
+  socket.on('end-call', handleCallTermination);
+
+  // 6. Triggered if coin wallet runs dry during call
   socket.on('insufficient-coins-end', (data) => {
     const { otherUserId } = data;
     const otherSocketId = onlineUsers.get(otherUserId);
@@ -1473,6 +1748,170 @@ io.on('connection', (socket) => {
       io.to(otherSocketId).emit('call-ended', { reason: 'insufficient_coins' });
     }
     console.log(`Call ended due to insufficient coins: ${userId} calling ${otherUserId}`);
+  });
+
+  // --- OMEGLE-STYLE RANDOM STRANGER MATCHING ENGINE ---
+  const cleanupStranger = (skId, notifyPartner = true) => {
+    const qIdx = strangerQueue.findIndex(item => item.socketId === skId);
+    if (qIdx !== -1) strangerQueue.splice(qIdx, 1);
+
+    const sess = strangerSessions.get(skId);
+    if (sess) {
+      strangerSessions.delete(skId);
+      const partnerSess = strangerSessions.get(sess.partnerSocketId);
+      if (partnerSess) {
+        strangerSessions.delete(sess.partnerSocketId);
+        if (notifyPartner) {
+          io.to(sess.partnerSocketId).emit('stranger-disconnected', {
+            reason: 'Stranger has disconnected or skipped.'
+          });
+        }
+      }
+    }
+  };
+
+  // Join Stranger Queue
+  socket.on('stranger-join-queue', () => {
+    cleanupStranger(socket.id, false);
+
+    // Filter out invalid/closed sockets
+    while (strangerQueue.length > 0 && !io.sockets.sockets.get(strangerQueue[0].socketId)) {
+      strangerQueue.shift();
+    }
+
+    const peer = strangerQueue.find(p => p.socketId !== socket.id && p.userId !== userId);
+    if (peer) {
+      const pIndex = strangerQueue.indexOf(peer);
+      if (pIndex !== -1) strangerQueue.splice(pIndex, 1);
+
+      const sessionId = 'stranger_sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      const myUser = socket.user || db.getUserById(userId) || { id: userId, username: 'You', avatar: '' };
+
+      strangerSessions.set(socket.id, {
+        sessionId,
+        partnerSocketId: peer.socketId,
+        partnerUserId: peer.userId,
+        partnerUsername: peer.username,
+        partnerAvatar: peer.avatar
+      });
+
+      strangerSessions.set(peer.socketId, {
+        sessionId,
+        partnerSocketId: socket.id,
+        partnerUserId: myUser.id,
+        partnerUsername: myUser.username,
+        partnerAvatar: myUser.avatar
+      });
+
+      // Peer was waiting first, so peer will initiate WebRTC offer
+      io.to(peer.socketId).emit('stranger-matched', {
+        sessionId,
+        isInitiator: true,
+        peer: {
+          id: myUser.id,
+          username: myUser.username,
+          avatar: myUser.avatar
+        }
+      });
+
+      socket.emit('stranger-matched', {
+        sessionId,
+        isInitiator: false,
+        peer: {
+          id: peer.userId,
+          username: peer.username,
+          avatar: peer.avatar
+        }
+      });
+
+      console.log(`[Omegle Matched] ${myUser.username} <-> ${peer.username} (Session: ${sessionId})`);
+    } else {
+      strangerQueue.push({
+        socketId: socket.id,
+        userId: userId,
+        username: socket.user.username,
+        avatar: socket.user.avatar
+      });
+      socket.emit('stranger-waiting', { queueLength: strangerQueue.length });
+      console.log(`[Omegle Queue] ${socket.user.username} entered queue. (Total waiting: ${strangerQueue.length})`);
+    }
+  });
+
+  // WebRTC Signaling between paired strangers
+  socket.on('stranger-signal', (data) => {
+    const sess = strangerSessions.get(socket.id);
+    if (sess && sess.partnerSocketId) {
+      io.to(sess.partnerSocketId).emit('stranger-signal', {
+        signal: data.signal,
+        from: socket.id
+      });
+    }
+  });
+
+  // In-call text messages between strangers
+  socket.on('stranger-message', (data) => {
+    const text = (data.text || '').trim();
+    if (!text) return;
+
+    if (db.isUserSuspended(userId)) {
+      socket.emit('account-suspended', {
+        reason: 'Aapka account community guidelines violations ke chalte suspend hai.'
+      });
+      return;
+    }
+
+    const violation = detectPersonalContactLeak(text);
+    if (violation.detected) {
+      const warnResult = db.addWarningToUser(userId, violation.type, violation.snippet);
+      socket.emit('policy-violation-warning', {
+        warningNumber: warnResult.warningNumber,
+        maxWarnings: 3,
+        violationType: violation.type,
+        snippet: violation.snippet,
+        message: warnResult.message,
+        reason: violation.reason,
+        isSuspended: warnResult.isSuspended
+      });
+      if (warnResult.isSuspended) {
+        socket.emit('account-suspended', { reason: warnResult.suspensionReason });
+      }
+      return; // Block message from stranger!
+    }
+
+    const sess = strangerSessions.get(socket.id);
+    if (sess && sess.partnerSocketId) {
+      const msg = {
+        id: 'smsg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        senderId: userId,
+        senderName: socket.user.username,
+        text: text,
+        timestamp: new Date().toISOString()
+      };
+      io.to(sess.partnerSocketId).emit('stranger-message', msg);
+      socket.emit('stranger-message', msg);
+    }
+  });
+
+  // Dual/Multi-user Camera AR Mask synchronization between strangers
+  socket.on('stranger-mask-update', (data) => {
+    const sess = strangerSessions.get(socket.id);
+    if (sess && sess.partnerSocketId) {
+      io.to(sess.partnerSocketId).emit('stranger-mask-update', {
+        maskActive: Boolean(data.maskActive),
+        maskStyle: data.maskStyle || 'venetian'
+      });
+    }
+  });
+
+  // Stranger Skip / Leave
+  socket.on('stranger-skip', () => {
+    cleanupStranger(socket.id, true);
+    socket.emit('stranger-skipped');
+  });
+
+  socket.on('stranger-leave', () => {
+    cleanupStranger(socket.id, true);
+    socket.emit('stranger-left');
   });
   
   // --- REAL-TIME LIVE STREAM EVENTS ---
@@ -1554,62 +1993,198 @@ io.on('connection', (socket) => {
     console.log(`Viewer ${socket.user.username} left live stream of: ${hostId}`);
   });
 
-  // Host toggles private show (with custom timer & minimum 300 coins entry fee)
+  // Host toggles private show (with custom timer, coin fee, and optional Secret PIN)
   socket.on('toggle-private', (data) => {
-    const { isPrivate, entryFee, durationMinutes } = data;
+    const { isPrivate, entryFee, durationMinutes, entryPin } = data;
     const stream = liveStreams.get(userId);
     if (!stream) return;
 
     stream.isPrivate = isPrivate;
-    stream.entryFee = isPrivate ? Math.max(300, Number(entryFee) || 300) : 0;
+    stream.entryFee = isPrivate ? Math.max(10, Number(entryFee) || 0) : 0;
+    stream.entryPin = isPrivate && entryPin ? String(entryPin).trim() : null;
     stream.privateDurationMinutes = Number(durationMinutes) || 0;
     stream.privateExpiresAt = isPrivate && Number(durationMinutes) > 0 ? Date.now() + (Number(durationMinutes) * 60 * 1000) : null;
+    stream.unlockedViewers = isPrivate ? [userId] : [];
     
     liveStreams.set(userId, stream);
     io.to(`live_room_${userId}`).emit('live-switched-private', { 
       isPrivate: stream.isPrivate, 
       entryFee: stream.entryFee,
+      hasPin: Boolean(stream.entryPin),
       privateDurationMinutes: stream.privateDurationMinutes,
       privateExpiresAt: stream.privateExpiresAt
     });
     io.emit('live-list-updated', Array.from(liveStreams.values()));
-    console.log(`Host ${socket.user.username} switched live stream private: ${isPrivate} with fee: ${stream.entryFee}, timer: ${durationMinutes} mins`);
+    console.log(`Host ${socket.user.username} switched live stream private: ${isPrivate} (Fee: ${stream.entryFee}, PIN: ${stream.entryPin || 'none'})`);
   });
 
-  // Viewer pays entry fee
+  // Viewer unlocks private show via Coins OR Secret PIN
   socket.on('pay-live-fee', (data) => {
-    const { hostId, fee } = data;
+    const { hostId, fee, pin } = data;
     const viewerUser = db.getUserById(userId);
     const hostUser = db.getUserById(hostId);
-    if (!viewerUser || !hostUser) return;
+    const stream = liveStreams.get(hostId);
+    if (!viewerUser || !hostUser || !stream) return;
 
-    const coinsToDeduct = Number(fee);
-    if (viewerUser.coins < coinsToDeduct) {
-      socket.emit('live-error', { reason: 'Insufficient coins to unlock Private Show' });
+    // 1. PIN verification if provided
+    if (pin && stream.entryPin && String(pin).trim().toLowerCase() === String(stream.entryPin).trim().toLowerCase()) {
+      if (!stream.unlockedViewers) stream.unlockedViewers = [];
+      stream.unlockedViewers.push(userId);
+      socket.emit('fee-paid-success', { coins: viewerUser.coins || 0, unlockedVia: 'pin' });
+      io.to(`live_room_${hostId}`).emit('live-comment-received', {
+        sender: 'System',
+        comment: `🔑 @${viewerUser.username} unlocked Private Show with Host PIN!`
+      });
+      console.log(`Viewer ${viewerUser.username} unlocked ${hostUser.username}'s private show using Secret PIN`);
       return;
     }
 
-    // Deduct coins from viewer
-    viewerUser.coins = Math.max(0, (viewerUser.coins || 0) - coinsToDeduct);
-    db.saveUser(viewerUser);
+    // 2. Coin Payment
+    const coinsToDeduct = Number(fee || stream.entryFee || 0);
+    if (coinsToDeduct > 0) {
+      if ((viewerUser.coins || 0) < coinsToDeduct) {
+        socket.emit('live-error', { reason: 'Insufficient coins in wallet! Please recharge coins.' });
+        return;
+      }
 
-    // Credit 70% earnings to host (70/30 split)
-    const hostEarned = Math.round(coinsToDeduct * 0.7);
-    hostUser.earnings = (hostUser.earnings || 0) + hostEarned;
-    db.saveUser(hostUser);
+      // Deduct coins from viewer
+      viewerUser.coins = Math.max(0, (viewerUser.coins || 0) - coinsToDeduct);
+      db.saveUser(viewerUser);
+
+      // Credit 70% earnings to host (70/30 split)
+      const hostEarned = Math.round(coinsToDeduct * 0.7);
+      hostUser.earnings = (hostUser.earnings || 0) + hostEarned;
+      db.saveUser(hostUser);
+    }
+
+    if (!stream.unlockedViewers) stream.unlockedViewers = [];
+    stream.unlockedViewers.push(userId);
 
     // Send success responses
-    socket.emit('fee-paid-success', { coins: viewerUser.coins });
+    socket.emit('fee-paid-success', { coins: viewerUser.coins || 0, unlockedVia: 'coins' });
     io.to(`live_room_${hostId}`).emit('live-comment-received', {
       sender: 'System',
       comment: `🎉 @${viewerUser.username} entered the Private Show!`
     });
-    console.log(`Viewer ${viewerUser.username} paid ${fee} coins to enter ${hostUser.username}'s private live (Host earned: ${hostEarned})`);
+    console.log(`Viewer ${viewerUser.username} paid ${coinsToDeduct} coins to enter ${hostUser.username}'s private live`);
+  });
+
+  // Virtual Gift sending during 1-on-1 audio/video calls
+  socket.on('send-call-gift', (data) => {
+    const { receiverId, giftType, coins } = data;
+    const senderUser = db.getUserById(userId);
+    const receiverUser = db.getUserById(receiverId);
+    if (!senderUser || !receiverUser) return;
+
+    const giftCost = Number(coins);
+    if ((senderUser.coins || 0) < giftCost) {
+      socket.emit('call-error', { reason: 'Insufficient coins in wallet! Please recharge.' });
+      return;
+    }
+
+    // Deduct from sender
+    senderUser.coins = Math.max(0, (senderUser.coins || 0) - giftCost);
+    db.saveUser(senderUser);
+
+    // Credit 70% to receiver
+    const earned = Math.round(giftCost * 0.7);
+    receiverUser.earnings = (receiverUser.earnings || 0) + earned;
+    db.saveUser(receiverUser);
+
+    const giftPayload = {
+      senderId: userId,
+      senderName: senderUser.username,
+      senderAvatar: senderUser.avatar,
+      receiverId: receiverId,
+      giftType: giftType,
+      coins: giftCost,
+      timestamp: new Date().toISOString()
+    };
+
+    const receiverSocketId = onlineUsers.get(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit('call-gift-received', giftPayload);
+    }
+    socket.emit('call-gift-sent', {
+      ...giftPayload,
+      newCoinsBalance: senderUser.coins
+    });
+    console.log(`[Call Gift] @${senderUser.username} sent ${giftType} (${coins} coins) to @${receiverUser.username}`);
+  });
+
+  // Stranger Gift sending during Omegle chat
+  socket.on('stranger-gift', (data) => {
+    const { giftType, coins } = data;
+    const sess = strangerSessions.get(socket.id);
+    const senderUser = db.getUserById(userId);
+    if (!senderUser) return;
+
+    const giftCost = Number(coins);
+    if ((senderUser.coins || 0) < giftCost) {
+      socket.emit('stranger-error', { reason: 'Insufficient coins in wallet!' });
+      return;
+    }
+
+    senderUser.coins = Math.max(0, (senderUser.coins || 0) - giftCost);
+    db.saveUser(senderUser);
+
+    if (sess && sess.partnerSocketId) {
+      const partnerUser = db.getUserById(sess.partnerUserId);
+      if (partnerUser) {
+        const earned = Math.round(giftCost * 0.7);
+        partnerUser.earnings = (partnerUser.earnings || 0) + earned;
+        db.saveUser(partnerUser);
+      }
+
+      const giftPayload = {
+        senderId: userId,
+        senderName: senderUser.username,
+        senderAvatar: senderUser.avatar,
+        giftType: giftType,
+        coins: giftCost,
+        timestamp: new Date().toISOString()
+      };
+
+      io.to(sess.partnerSocketId).emit('call-gift-received', giftPayload);
+    }
+
+    socket.emit('call-gift-sent', {
+      giftType,
+      coins: giftCost,
+      newCoinsBalance: senderUser.coins
+    });
   });
 
   // Live comment
   socket.on('send-live-comment', (data) => {
     const { hostId, comment } = data;
+    if (!comment) return;
+
+    if (db.isUserSuspended(userId)) {
+      socket.emit('account-suspended', {
+        reason: 'Aapka account community guidelines violations ke chalte suspend hai.'
+      });
+      return;
+    }
+
+    const violation = detectPersonalContactLeak(comment);
+    if (violation.detected) {
+      const warnResult = db.addWarningToUser(userId, violation.type, violation.snippet);
+      socket.emit('policy-violation-warning', {
+        warningNumber: warnResult.warningNumber,
+        maxWarnings: 3,
+        violationType: violation.type,
+        snippet: violation.snippet,
+        message: warnResult.message,
+        reason: violation.reason,
+        isSuspended: warnResult.isSuspended
+      });
+      if (warnResult.isSuspended) {
+        socket.emit('account-suspended', { reason: warnResult.suspensionReason });
+      }
+      return; // Block comment!
+    }
+
     io.to(`live_room_${hostId}`).emit('live-comment-received', {
       sender: socket.user.username,
       comment: comment
@@ -1664,6 +2239,7 @@ io.on('connection', (socket) => {
 
   // Handle Disconnect
   socket.on('disconnect', () => {
+    cleanupStranger(socket.id, true);
     onlineUsers.delete(userId);
     io.emit('user-status-change', { userId: userId, isOnline: false });
     

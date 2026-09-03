@@ -1,23 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Radio, Users, Plus, ShieldCheck, X, Sparkles, Award } from 'lucide-react';
+import { Radio, Users, Plus, ShieldCheck, X, Sparkles, Award, Search, Phone, Video, MessageSquare, User } from 'lucide-react';
 import { apiRequest, getStoredUser, setSession } from '../utils/api';
 import MobileLayout from '../components/MobileLayout';
 
 export default function LiveLobby() {
   const navigate = useNavigate();
   const [streams, setStreams] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showSetup, setShowSetup] = useState(false);
   const [streamTitle, setStreamTitle] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('live'); // 'live' | 'users'
   
   const [currentUser, setCurrentUser] = useState(getStoredUser());
 
   const fetchActiveStreams = async () => {
     try {
-      const data = await apiRequest('/api/live/streams');
-      setStreams(data);
+      const [streamData, usersData] = await Promise.all([
+        apiRequest('/api/live/streams'),
+        apiRequest('/api/users').catch(() => [])
+      ]);
+      setStreams(streamData);
+      setAllUsers(usersData);
     } catch (err) {
       setError(err.message || 'Failed to load live shows');
     } finally {
@@ -119,72 +126,190 @@ export default function LiveLobby() {
           )}
         </div>
 
-        <h3 className="font-extrabold text-slate-800 text-xs pl-1 uppercase tracking-wider mt-1">
-          Active Live Broadcasts
-        </h3>
+        {/* Search Bar for Live Shows & Users by Username */}
+        <div className="relative mt-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search live shows or users by username..."
+            className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-pink-500 focus:bg-white shadow-sm transition-all"
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')} 
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
 
-        {/* Stream lists */}
-        {loading ? (
-          <div className="flex-grow flex flex-col items-center justify-center py-20 text-slate-400">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mb-2"></div>
-            <span className="text-xs">Finding live shows...</span>
-          </div>
-        ) : error ? (
-          <div className="text-center py-10 text-red-500 text-xs">{error}</div>
-        ) : streams.length === 0 ? (
-          <div className="flex-grow flex flex-col items-center justify-center py-20 text-center text-slate-400">
-            <Radio size={36} className="text-slate-300 stroke-1 mb-2" />
-            <span className="text-xs font-semibold">No active live shows right now</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Please check back in a few minutes!</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3.5 mt-1">
-            {streams.map((stream) => (
-              <div 
-                key={stream.id}
-                onClick={() => handleJoinStream(stream.hostId)}
-                className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col relative"
-              >
-                {/* Visual Cover (Mock) */}
-                <div className="h-28 bg-slate-950 flex items-center justify-center relative">
-                  <img 
-                    src={stream.hostAvatar} 
-                    alt={stream.hostName} 
-                    className="w-16 h-16 rounded-full border border-white/20 object-cover opacity-80"
-                  />
-                  <div className="absolute top-2 left-2 bg-red-500 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 tracking-wider uppercase">
-                    <span className="w-1 h-1 bg-white rounded-full animate-ping"></span>
-                    <span>Live</span>
-                  </div>
+        {/* Tab Navigation: Live Broadcasts vs Find Users */}
+        <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
+          <button
+            onClick={() => setActiveTab('live')}
+            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'live' 
+                ? 'bg-white text-slate-900 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Radio size={13} className={activeTab === 'live' ? 'text-red-500 animate-pulse' : ''} />
+            <span>Live Broadcasts ({streams.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'users' 
+                ? 'bg-white text-slate-900 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <User size={13} className={activeTab === 'users' ? 'text-pink-500' : ''} />
+            <span>Search Users ({allUsers.length})</span>
+          </button>
+        </div>
 
-                  {/* Private badge indicator */}
-                  {stream.isPrivate ? (
-                    <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur text-yellow-400 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
-                      🔒 Private (🪙{stream.entryFee})
-                    </div>
-                  ) : (
-                    <div className="absolute top-2 right-2 bg-slate-900/60 backdrop-blur text-green-400 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
-                      🌎 Public
-                    </div>
-                  )}
-
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[9px] font-bold bg-black/40 px-1.5 py-0.5 rounded">
-                    <Users size={10} />
-                    <span>{stream.viewers?.length || 0}</span>
-                  </div>
-                </div>
-
-                {/* Host Title info */}
-                <div className="p-3 flex flex-col gap-0.5">
-                  <h4 className="font-extrabold text-slate-800 text-xs truncate">
-                    {stream.title}
-                  </h4>
-                  <p className="text-[9px] text-slate-400 font-semibold uppercase">
-                    @{stream.hostName}
-                  </p>
-                </div>
+        {/* TAB 1: LIVE BROADCASTS */}
+        {activeTab === 'live' && (
+          <>
+            {loading ? (
+              <div className="flex-grow flex flex-col items-center justify-center py-20 text-slate-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mb-2"></div>
+                <span className="text-xs">Finding live shows...</span>
               </div>
-            ))}
+            ) : error ? (
+              <div className="text-center py-10 text-red-500 text-xs">{error}</div>
+            ) : streams.filter(s => 
+                !searchQuery || 
+                (s.hostName && s.hostName.toLowerCase().includes(searchQuery.toLowerCase())) || 
+                (s.title && s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+              ).length === 0 ? (
+              <div className="flex-grow flex flex-col items-center justify-center py-16 text-center text-slate-400">
+                <Radio size={36} className="text-slate-300 stroke-1 mb-2" />
+                <span className="text-xs font-semibold">
+                  {searchQuery ? `No live shows matching "${searchQuery}"` : 'No active live shows right now'}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {searchQuery ? 'Try searching in the "Search Users" tab above!' : 'Please check back in a few minutes!'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 mt-1">
+                {streams
+                  .filter(s => 
+                    !searchQuery || 
+                    (s.hostName && s.hostName.toLowerCase().includes(searchQuery.toLowerCase())) || 
+                    (s.title && s.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                  )
+                  .map((stream) => (
+                    <div 
+                      key={stream.id}
+                      onClick={() => handleJoinStream(stream.hostId)}
+                      className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col relative"
+                    >
+                      <div className="h-28 bg-slate-950 flex items-center justify-center relative">
+                        <img 
+                          src={stream.hostAvatar} 
+                          alt={stream.hostName} 
+                          className="w-16 h-16 rounded-full border border-white/20 object-cover opacity-80"
+                        />
+                        <div className="absolute top-2 left-2 bg-red-500 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 tracking-wider uppercase">
+                          <span className="w-1 h-1 bg-white rounded-full animate-ping"></span>
+                          <span>Live</span>
+                        </div>
+
+                        {stream.isPrivate ? (
+                          <div className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur text-yellow-400 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
+                            🔒 Private (🪙{stream.entryFee})
+                          </div>
+                        ) : (
+                          <div className="absolute top-2 right-2 bg-slate-900/60 backdrop-blur text-green-400 text-[8px] font-extrabold px-1.5 py-0.5 rounded-md uppercase">
+                            🌎 Public
+                          </div>
+                        )}
+
+                        <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white text-[9px] font-bold bg-black/40 px-1.5 py-0.5 rounded">
+                          <Users size={10} />
+                          <span>{stream.viewers?.length || 0}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 flex flex-col gap-0.5">
+                        <h4 className="font-extrabold text-slate-800 text-xs truncate">
+                          {stream.title}
+                        </h4>
+                        <p className="text-[9px] text-pink-500 font-bold uppercase">
+                          @{stream.hostName}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* TAB 2: SEARCH USERS BY USERNAME */}
+        {activeTab === 'users' && (
+          <div className="flex flex-col gap-2">
+            {allUsers
+              .filter(u => 
+                !searchQuery || 
+                (u.username && u.username.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                (u.mobile && u.mobile.includes(searchQuery))
+              )
+              .map((u) => {
+                const isOnline = u.isOnline;
+                const isSelf = currentUser && currentUser.id === u.id;
+                return (
+                  <div 
+                    key={u.id}
+                    className="p-3 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-between shadow-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="relative">
+                        <img 
+                          src={u.avatar} 
+                          alt={u.username} 
+                          className="w-10 h-10 rounded-xl object-cover border border-slate-100" 
+                        />
+                        <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                          <span>{u.username}</span>
+                          {isSelf && <span className="text-[9px] bg-pink-100 text-pink-600 px-1.5 py-0.2 rounded font-black">YOU</span>}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {isOnline ? '🟢 Online' : '⚪ Offline'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isSelf && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => navigate(`/chat/dm/${u.id}`)}
+                          className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
+                          title="Message"
+                        >
+                          <MessageSquare size={14} />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/calls`)}
+                          className="p-2 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-xl transition-all"
+                          title="Call"
+                        >
+                          <Phone size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         )}
 

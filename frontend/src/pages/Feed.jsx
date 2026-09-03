@@ -5,11 +5,11 @@ import {
   Play, Loader2, Camera, Phone, Video, Award, Radio, Check, 
   Volume2, ShieldCheck, UserCheck, Flame, Zap, Share2, Gift
 } from 'lucide-react';
-import { apiRequest, getSocket, getStoredUser, initSocket, setSession } from '../utils/api';
+import { apiRequest, getStoredUser } from '../utils/api';
 import MobileLayout from '../components/MobileLayout';
 import BeautyCameraModal from '../components/BeautyCameraModal';
-import CallScreen from '../components/CallScreen';
 import ShareAppModal from '../components/ShareAppModal';
+import { useCall } from '../context/CallContext';
 
 export default function Feed() {
   const [users, setUsers] = useState([]);
@@ -21,14 +21,7 @@ export default function Feed() {
   
   // Calling Directory Filter: 'all', 'partners', 'video', 'audio'
   const [callingFilter, setCallingFilter] = useState('all');
-
-  // Calling States
-  const [callState, setCallState] = useState({
-    status: 'idle', // 'idle', 'calling', 'ringing', 'active'
-    type: 'audio', // 'audio', 'video'
-    otherUser: null,
-    isCaller: false
-  });
+  const { startCall } = useCall();
   
   // Stories state
   const [stories, setStories] = useState([]);
@@ -71,125 +64,6 @@ export default function Feed() {
     fetchFeedData();
   }, []);
 
-  // Setup Real-time Calling Socket listeners on Feed
-  useEffect(() => {
-    let isMounted = true;
-    const socket = initSocket();
-
-    if (socket) {
-      socket.on('incoming-call', (data) => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'ringing',
-          type: data.type,
-          otherUser: {
-            id: data.callerId,
-            username: data.callerName,
-            avatar: data.callerAvatar
-          },
-          isCaller: false
-        });
-      });
-
-      socket.on('call-accepted', () => {
-        if (!isMounted) return;
-        setCallState((prev) => ({
-          ...prev,
-          status: 'active'
-        }));
-      });
-
-      socket.on('call-rejected', () => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-        alert('Call was declined');
-      });
-
-      socket.on('call-ended', () => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-      });
-
-      socket.on('call-failed', (data) => {
-        if (!isMounted) return;
-        setCallState({
-          status: 'idle',
-          type: 'audio',
-          otherUser: null,
-          isCaller: false
-        });
-        alert(`Call failed: ${data.reason || 'User busy'}`);
-      });
-    }
-
-    return () => {
-      isMounted = false;
-      if (socket) {
-        socket.off('incoming-call');
-        socket.off('call-accepted');
-        socket.off('call-rejected');
-        socket.off('call-ended');
-        socket.off('call-failed');
-      }
-    };
-  }, []);
-
-  // Periodic coin deduction for caller during active call
-  useEffect(() => {
-    let interval = null;
-    const rate = callState.type === 'video' 
-      ? (callState.otherUser?.videoCallRate || 20) 
-      : (callState.otherUser?.voiceCallRate || 10);
-    
-    if (callState.status === 'active' && callState.isCaller && callState.otherUser) {
-      interval = setInterval(async () => {
-        try {
-          const response = await apiRequest('/api/wallet/deduct', 'POST', { 
-            coins: rate, 
-            receiverId: callState.otherUser.id 
-          });
-          
-          setUserCoins(response.coins);
-          const token = localStorage.getItem('chitchat_token');
-          const storedUser = getStoredUser();
-          setSession(token, { ...storedUser, coins: response.coins });
-          
-          if (response.coins < rate) {
-            clearInterval(interval);
-            const socket = getSocket();
-            if (socket) {
-              socket.emit('insufficient-coins-end', { otherUserId: callState.otherUser.id });
-            }
-            setCallState({
-              status: 'idle',
-              type: 'audio',
-              otherUser: null,
-              isCaller: false
-            });
-            alert('Call disconnected: Insufficient coins. Please recharge!');
-          }
-        } catch (err) {
-          console.error('Failed to deduct coins during call:', err);
-          handleHangupCall();
-        }
-      }, 10000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [callState.status, callState.isCaller, callState.otherUser, callState.type]);
-
   // Handle auto-playing story progress
   useEffect(() => {
     if (selectedStory) {
@@ -201,7 +75,7 @@ export default function Feed() {
             handleCloseStory();
             return 100;
           }
-          return prev + 2; // Ticks every 100ms, total 5 seconds
+          return prev + 2;
         });
       }, 100);
     }
@@ -211,74 +85,8 @@ export default function Feed() {
     };
   }, [selectedStory]);
 
-  // --- CALLING HANDLERS ---
   const handleStartDirectCall = (targetUser, type) => {
-    const rate = type === 'video' ? (targetUser.videoCallRate || 20) : (targetUser.voiceCallRate || 10);
-    if (userCoins < rate) {
-      const confirmRecharge = window.confirm(`⚠️ Insufficient coins (Minimum ${rate} Coins required to start a ${type === 'video' ? 'Video' : 'Voice'} call). Would you like to recharge now?`);
-      if (confirmRecharge) {
-        navigate('/shop');
-      }
-      return;
-    }
-
-    const socket = getSocket();
-    if (socket) {
-      socket.emit('initiate-call', {
-        receiverId: targetUser.id,
-        type: type
-      });
-      
-      setCallState({
-        status: 'calling',
-        type: type,
-        otherUser: targetUser,
-        isCaller: true
-      });
-    }
-  };
-
-  const handleAcceptCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('accept-call', {
-        callerId: callState.otherUser.id
-      });
-      setCallState((prev) => ({
-        ...prev,
-        status: 'active'
-      }));
-    }
-  };
-
-  const handleRejectCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('reject-call', {
-        callerId: callState.otherUser.id
-      });
-      setCallState({
-        status: 'idle',
-        type: 'audio',
-        otherUser: null,
-        isCaller: false
-      });
-    }
-  };
-
-  const handleHangupCall = () => {
-    const socket = getSocket();
-    if (socket && callState.otherUser) {
-      socket.emit('end-call', {
-        otherUserId: callState.otherUser.id
-      });
-    }
-    setCallState({
-      status: 'idle',
-      type: 'audio',
-      otherUser: null,
-      isCaller: false
-    });
+    startCall(targetUser, type);
   };
 
   const handleStartChat = (userId) => {
@@ -637,7 +445,7 @@ export default function Feed() {
                       <button
                         onClick={() => handleStartDirectCall(user, 'audio')}
                         className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1 shadow-md shadow-emerald-900/50 transition-all"
-                        title="Start Voice Audio Call (1 coin/sec)"
+                        title="Start Voice Audio Call (5 coins/min)"
                       >
                         <Phone size={12} />
                         <span>Voice</span>
@@ -647,7 +455,7 @@ export default function Feed() {
                       <button
                         onClick={() => handleStartDirectCall(user, 'video')}
                         className="px-2.5 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:opacity-90 active:scale-95 text-white rounded-xl text-[10px] font-extrabold flex items-center gap-1 shadow-md shadow-pink-900/50 transition-all"
-                        title="Start HD Video Call (20 coins/10s)"
+                        title="Start HD Video Call (8 coins/min)"
                       >
                         <Video size={12} />
                         <span>Video</span>
@@ -854,17 +662,6 @@ export default function Feed() {
           onClose={() => setShowBeautyCam(false)} 
           onCapture={handleBeautyCamCapture} 
         />
-
-        {/* Direct CallScreen Overlay for Real-time Calls */}
-        {callState.status !== 'idle' && (
-          <CallScreen 
-            callState={callState}
-            coins={userCoins}
-            onAccept={handleAcceptCall}
-            onReject={handleRejectCall}
-            onHangup={handleHangupCall}
-          />
-        )}
 
         {/* Share App Modal */}
         <ShareAppModal 

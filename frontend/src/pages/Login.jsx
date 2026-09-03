@@ -9,7 +9,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [guestLoading, setGuestLoading] = useState(false);
   const [logoTaps, setLogoTaps] = useState(0);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [successNotice, setSuccessNotice] = useState('');
@@ -34,27 +33,6 @@ export default function Login() {
       setError(err.message || 'Login failed. Please check credentials.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGuestLogin = async () => {
-    setGuestLoading(true);
-    setError('');
-    try {
-      const response = await apiRequest('/api/auth/guest-login', 'POST');
-      setSession(response.token, response.user);
-      navigate('/');
-    } catch (err) {
-      // Fallback: try demo login
-      try {
-        const demoRes = await apiRequest('/api/auth/login', 'POST', { username: 'angel', password: 'password123' });
-        setSession(demoRes.token, demoRes.user);
-        navigate('/');
-      } catch (e) {
-        setError('Instant guest login unavailable. Please create an account or log in.');
-      }
-    } finally {
-      setGuestLoading(false);
     }
   };
 
@@ -188,19 +166,6 @@ export default function Login() {
               <ArrowRight size={15} />
             </button>
           </form>
-
-          {/* Quick Web Demo / One-Click Guest Login Button */}
-          <div className="w-full mt-3">
-            <button
-              type="button"
-              onClick={handleGuestLogin}
-              disabled={guestLoading}
-              className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-pink-500/40 text-pink-300 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 active:scale-98 transition-all"
-            >
-              <Sparkles size={14} className="text-amber-400" />
-              <span>{guestLoading ? 'Connecting...' : 'Instant Web Demo / 1-Click Guest'}</span>
-            </button>
-          </div>
         </div>
 
         {/* Forgot Password OTP Modal */}

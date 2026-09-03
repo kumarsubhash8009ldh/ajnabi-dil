@@ -4,7 +4,8 @@ import {
   ArrowLeft, Users, ShieldAlert, MessageSquare, ShieldCheck, Mail, 
   Database, CheckCircle, XCircle, Settings, Upload, Image, 
   Search, Lock, Unlock, UserCheck, UserX, Ban, DollarSign, 
-  Plus, Minus, Trash2, Eye, ExternalLink, RefreshCw, Radio
+  Plus, Minus, Trash2, Eye, ExternalLink, RefreshCw, Radio,
+  Edit3, Clock, Video, Phone, X, Save
 } from 'lucide-react';
 import { apiRequest } from '../utils/api';
 
@@ -27,6 +28,21 @@ export default function AdminPanel() {
   const [coinModalUser, setCoinModalUser] = useState(null);
   const [coinAmountToAdd, setCoinAmountToAdd] = useState('');
 
+  // Full User Edit Modal State
+  const [editingUser, setEditingUser] = useState(null);
+  const [userEditForm, setUserEditForm] = useState({
+    username: '',
+    mobile: '',
+    password: '',
+    coins: 0,
+    earnings: 0,
+    isPartner: false,
+    isAdmin: false,
+    isBanned: false,
+    voiceCallRate: 5,
+    videoCallRate: 8
+  });
+
   // KYC Image Preview Modal State
   const [kycPreviewUrl, setKycPreviewUrl] = useState(null);
 
@@ -35,10 +51,12 @@ export default function AdminPanel() {
   const [selectedDmUser2, setSelectedDmUser2] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState('');
 
-  // Support & Settings State
-  const [supportWhatsapp, setSupportWhatsapp] = useState('+91 9876543210');
+  // 3 WhatsApp Numbers Support & Settings State
+  const [supportWhatsapp1, setSupportWhatsapp1] = useState('+91 9876543211');
+  const [supportWhatsapp2, setSupportWhatsapp2] = useState('+91 9876543212');
+  const [supportWhatsapp3, setSupportWhatsapp3] = useState('+91 9876543213');
   const [supportEmail, setSupportEmail] = useState('support@ajnabidil.com');
-  const [supportHours, setSupportHours] = useState('24x7 Live Customer Care');
+  const [supportHours, setSupportHours] = useState('8:00 AM – 10:00 PM (Daily)');
   const [supportHelpText, setSupportHelpText] = useState('');
   const [savingSupport, setSavingSupport] = useState(false);
   const [supportSuccess, setSupportSuccess] = useState(false);
@@ -75,9 +93,11 @@ export default function AdminPanel() {
         setSelectedDmUser2(response.users[1].id);
       }
       if (response.adminSettings) {
-        setSupportWhatsapp(response.adminSettings.whatsappNumber || '+91 9876543210');
+        setSupportWhatsapp1(response.adminSettings.whatsappNumber1 || response.adminSettings.whatsappNumber || '+91 9876543211');
+        setSupportWhatsapp2(response.adminSettings.whatsappNumber2 || '+91 9876543212');
+        setSupportWhatsapp3(response.adminSettings.whatsappNumber3 || '+91 9876543213');
         setSupportEmail(response.adminSettings.supportEmail || 'support@ajnabidil.com');
-        setSupportHours(response.adminSettings.supportHours || '24x7 Live Customer Care');
+        setSupportHours(response.adminSettings.supportHours || '8:00 AM – 10:00 PM (Daily)');
         setSupportHelpText(response.adminSettings.helpText || '');
       }
     } catch (err) {
@@ -226,21 +246,90 @@ export default function AdminPanel() {
     }
   };
 
-  // Support & QR Settings
+  // Master Admin: Full User Edit
+  const handleOpenEditUser = (u) => {
+    setEditingUser(u);
+    setUserEditForm({
+      username: u.username || '',
+      mobile: u.mobile || '',
+      password: '',
+      coins: u.coins !== undefined ? u.coins : 0,
+      earnings: u.earnings !== undefined ? u.earnings : 0,
+      isPartner: Boolean(u.isPartner),
+      isAdmin: Boolean(u.isAdmin),
+      isBanned: Boolean(u.isBanned),
+      voiceCallRate: u.voiceCallRate || 5,
+      videoCallRate: u.videoCallRate || 8
+    });
+  };
+
+  const handleSaveUserEdit = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      const payload = {
+        userId: editingUser.id,
+        ...userEditForm
+      };
+      const res = await apiRequest('/api/admin/users/edit', 'POST', payload);
+      setData(prev => ({
+        ...prev,
+        users: prev.users.map(u => u.id === editingUser.id ? { ...u, ...res.user } : u)
+      }));
+      setEditingUser(null);
+      alert(`User @${userEditForm.username} profile updated successfully!`);
+    } catch (err) {
+      alert(err.message || 'Failed to update user profile');
+    }
+  };
+
+  // Master Admin: Delete Room
+  const handleDeleteRoom = async (roomId, roomName) => {
+    if (!window.confirm(`⚠️ Are you sure you want to permanently DELETE room "${roomName}"?`)) return;
+    try {
+      await apiRequest(`/api/admin/rooms/${roomId}`, 'DELETE');
+      setData(prev => ({
+        ...prev,
+        rooms: prev.rooms.filter(r => r.id !== roomId)
+      }));
+      alert(`Room "${roomName}" deleted successfully!`);
+    } catch (err) {
+      alert(err.message || 'Failed to delete room');
+    }
+  };
+
+  // Master Admin: Terminate Live Broadcast
+  const handleTerminateStream = async (hostId, hostName) => {
+    if (!window.confirm(`⚠️ FORCE TERMINATE: End live broadcast of @${hostName}?`)) return;
+    try {
+      await apiRequest('/api/admin/live/terminate', 'POST', { hostId });
+      setData(prev => ({
+        ...prev,
+        activeLiveStreams: (prev.activeLiveStreams || []).filter(s => s.hostId !== hostId)
+      }));
+      alert(`Live broadcast of @${hostName} terminated!`);
+    } catch (err) {
+      alert(err.message || 'Failed to terminate live broadcast');
+    }
+  };
+
+  // Support & QR Settings (3 WhatsApp numbers & 8am-10pm hours)
   const handleSaveSupportSettings = async (e) => {
     e.preventDefault();
     setSavingSupport(true);
     setSupportSuccess(false);
     try {
       await apiRequest('/api/admin/settings', 'PUT', {
-        whatsappNumber: supportWhatsapp,
+        whatsappNumber1: supportWhatsapp1,
+        whatsappNumber2: supportWhatsapp2,
+        whatsappNumber3: supportWhatsapp3,
         supportEmail,
         supportHours,
         helpText: supportHelpText
       });
       setSupportSuccess(true);
       setTimeout(() => setSupportSuccess(false), 3000);
-      alert('Support and WhatsApp settings saved successfully!');
+      alert('Official 3 WhatsApp numbers & 8am-10pm support settings saved successfully!');
     } catch (err) {
       alert(err.message || 'Failed to save support settings');
     } finally {
@@ -495,7 +584,17 @@ export default function AdminPanel() {
           }`}
         >
           <MessageSquare size={15} />
-          <span>Voice Rooms</span>
+          <span>Voice Rooms ({data?.rooms?.length || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('streams')}
+          className={`py-3 px-4 text-xs font-black uppercase tracking-wider border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeTab === 'streams' ? 'border-rose-500 text-rose-400 bg-rose-950/20' : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Radio size={15} />
+          <span>Live Broadcasts ({data?.activeLiveStreams?.length || data?.activeLiveStreamsCount || 0})</span>
         </button>
 
         <button
@@ -635,6 +734,16 @@ export default function AdminPanel() {
                       >
                         <Ban size={13} />
                         <span>{u.isBanned ? 'Unban' : 'Ban'}</span>
+                      </button>
+
+                      {/* Master Full Edit User */}
+                      <button
+                        onClick={() => handleOpenEditUser(u)}
+                        className="py-1.5 px-2 bg-pink-600/20 hover:bg-pink-600/40 text-pink-300 border border-pink-500/40 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all"
+                        title="Edit User Profile, Mobile, Password, Coins, Role"
+                      >
+                        <Edit3 size={13} />
+                        <span>Edit</span>
                       </button>
 
                       {/* Delete User */}
@@ -889,14 +998,38 @@ export default function AdminPanel() {
               <p className="text-[11px] text-slate-400">Users reach this number for 24/7 Recharge and Host Support</p>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Official WhatsApp Number</label>
+                <label className="text-[10px] uppercase font-bold text-emerald-400">WhatsApp Line 1 (Recharge & Payments)</label>
                 <input 
                   type="text"
                   required
-                  value={supportWhatsapp}
-                  onChange={(e) => setSupportWhatsapp(e.target.value)}
-                  placeholder="+91 9876543210"
+                  value={supportWhatsapp1}
+                  onChange={(e) => setSupportWhatsapp1(e.target.value)}
+                  placeholder="+91 9876543211"
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl text-white font-mono text-xs outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-pink-400">WhatsApp Line 2 (Host KYC & Accounts)</label>
+                <input 
+                  type="text"
+                  required
+                  value={supportWhatsapp2}
+                  onChange={(e) => setSupportWhatsapp2(e.target.value)}
+                  placeholder="+91 9876543212"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-pink-500 rounded-xl text-white font-mono text-xs outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-indigo-400">WhatsApp Line 3 (Calling & Technical)</label>
+                <input 
+                  type="text"
+                  required
+                  value={supportWhatsapp3}
+                  onChange={(e) => setSupportWhatsapp3(e.target.value)}
+                  placeholder="+91 9876543213"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl text-white font-mono text-xs outline-none"
                 />
               </div>
 
@@ -913,13 +1046,13 @@ export default function AdminPanel() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400">Operating Hours</label>
+                <label className="text-[10px] uppercase font-bold text-amber-400">Service / Operating Hours (e.g. 8:00 AM – 10:00 PM)</label>
                 <input 
                   type="text"
                   value={supportHours}
                   onChange={(e) => setSupportHours(e.target.value)}
-                  placeholder="24x7 Live Customer Care"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl text-white text-xs outline-none"
+                  placeholder="8:00 AM – 10:00 PM (Daily)"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl text-white text-xs outline-none"
                 />
               </div>
 
@@ -989,28 +1122,145 @@ export default function AdminPanel() {
 
         {/* 6. ROOMS TAB */}
         {activeTab === 'rooms' && (
-          <div className="flex flex-col gap-3">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-bold text-slate-400">Select Room</label>
-              <select
-                value={selectedRoomId}
-                onChange={(e) => setSelectedRoomId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none"
-              >
-                {data?.rooms?.map(r => (
-                  <option key={r.id} value={r.id}>{r.name} ({r.isPrivate ? 'Private' : 'Public'})</option>
-                ))}
-              </select>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase text-purple-400 tracking-wider">
+                All Voice & Chat Rooms ({data?.rooms?.length || 0})
+              </h3>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2 min-h-[300px]">
-              {(data?.roomMessages || []).filter(m => m.roomId === selectedRoomId).map(msg => (
-                <div key={msg.id} className="border-b border-slate-800 pb-2">
-                  <span className="font-bold text-xs text-pink-400">@{msg.senderName}:</span>
-                  <span className="text-xs text-slate-200 ml-2">{msg.content}</span>
+            {/* Rooms Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {(data?.rooms || []).map((r) => (
+                <div 
+                  key={r.id}
+                  className="bg-slate-900 border border-slate-800 hover:border-purple-500/40 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-white">{r.name}</h4>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          r.isPrivate ? 'bg-amber-950 text-amber-300 border border-amber-500/40' : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                        }`}>
+                          {r.isPrivate ? 'Private Room' : 'Public Room'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">{r.description || 'No description'}</p>
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteRoom(r.id, r.name)}
+                      className="p-1.5 bg-red-950/60 hover:bg-red-900 text-red-400 rounded-xl transition-all"
+                      title="Delete Room"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-2 flex justify-between items-center text-[10px] font-mono text-slate-400">
+                    <span>Room ID: {r.id}</span>
+                    {r.isPrivate && (
+                      <span className="text-amber-300 font-bold">
+                        Fee: {r.entryFee || 0} Coins {r.entryCode ? `• PIN: ${r.entryCode}` : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
+
+            {/* Room Live Message Log Inspector */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 mt-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Inspect Room Chat Logs</label>
+                <select
+                  value={selectedRoomId}
+                  onChange={(e) => setSelectedRoomId(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none"
+                >
+                  {data?.rooms?.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2 max-h-60 overflow-y-auto">
+                {(data?.roomMessages || []).filter(m => m.roomId === selectedRoomId).length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-4">No recent messages in this room.</p>
+                ) : (
+                  (data?.roomMessages || []).filter(m => m.roomId === selectedRoomId).map(msg => (
+                    <div key={msg.id} className="border-b border-slate-800/60 pb-1.5 last:border-none text-xs">
+                      <span className="font-bold text-pink-400">@{msg.senderName}:</span>
+                      <span className="text-slate-200 ml-2">{msg.content}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 7. LIVE BROADCASTS TAB */}
+        {activeTab === 'streams' && (
+          <div className="flex flex-col gap-4">
+            <h3 className="text-xs font-black uppercase text-rose-400 tracking-wider">
+              Active Live Stream Broadcasts ({(data?.activeLiveStreams || []).length})
+            </h3>
+
+            {(data?.activeLiveStreams || []).length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center flex flex-col items-center gap-2">
+                <Radio size={32} className="text-slate-600" />
+                <p className="text-sm font-bold text-slate-400">No active Live Streams at the moment</p>
+                <span className="text-xs text-slate-500">Live streams will appear here when hosts or users broadcast</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {data.activeLiveStreams.map((s) => (
+                  <div 
+                    key={s.id || s.hostId} 
+                    className="bg-slate-900 border border-rose-500/30 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={s.hostAvatar || '/logo.jpg'} 
+                          alt="Host" 
+                          className="w-12 h-12 rounded-2xl object-cover bg-slate-800 border border-rose-500/40"
+                        />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="text-sm font-black text-white">@{s.hostName}</h4>
+                            <span className="text-[9px] font-bold bg-rose-950 text-rose-300 border border-rose-500/40 px-1.5 py-0.2 rounded-full uppercase flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping"></span>
+                              LIVE
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 font-medium mt-0.5">{s.title}</p>
+                        </div>
+                      </div>
+
+                      <span className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-xl text-xs font-black">
+                        👥 {(s.viewers || []).length} Viewers
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                      <span className={`text-[10px] font-bold uppercase ${s.isPrivate ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {s.isPrivate ? `🔒 Private Show (${s.entryFee || 0} Coins)` : '🌐 Public Stream'}
+                      </span>
+
+                      <button
+                        onClick={() => handleTerminateStream(s.hostId, s.hostName)}
+                        className="py-1.5 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-black shadow active:scale-95 transition-all"
+                      >
+                        Force End Broadcast
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1118,6 +1368,170 @@ export default function AdminPanel() {
                   className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-md"
                 >
                   Apply Change
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🛠️ FULL USER EDIT MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl border border-pink-500/40 p-5 text-white shadow-2xl my-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center">
+                  <Edit3 size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Full User Editor</h3>
+                  <span className="text-[10px] text-slate-400 font-mono">ID: {editingUser.id}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEdit} className="flex flex-col gap-3">
+              {/* Username & Mobile */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Username</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={userEditForm.username}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, username: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Mobile Number</label>
+                  <input 
+                    type="tel" 
+                    value={userEditForm.mobile}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, mobile: e.target.value }))}
+                    placeholder="10-digit mobile"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-pink-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Reset Password */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-bold text-slate-400">Reset Password (Optional)</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter new password to change, or leave blank"
+                  value={userEditForm.password}
+                  onChange={(e) => setUserEditForm(prev => ({ ...prev, password: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-pink-500 placeholder-slate-600"
+                />
+              </div>
+
+              {/* Coins & Earnings Balance */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-amber-400">Coins Balance (🪙)</label>
+                  <input 
+                    type="number" 
+                    value={userEditForm.coins}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, coins: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-amber-400 font-mono"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-emerald-400">Host Earnings (₹)</label>
+                  <input 
+                    type="number" 
+                    value={userEditForm.earnings}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, earnings: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Calling Rates (Audio & Video) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Audio Call Rate (Rs./min)</label>
+                  <input 
+                    type="number" 
+                    value={userEditForm.voiceCallRate}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, voiceCallRate: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none font-mono"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-bold text-slate-400">Video Call Rate (Rs./min)</label>
+                  <input 
+                    type="number" 
+                    value={userEditForm.videoCallRate}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, videoCallRate: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Roles & Status Checkboxes */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Account Role & Privileges</span>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input 
+                    type="checkbox"
+                    checked={userEditForm.isPartner}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, isPartner: e.target.checked }))}
+                    className="w-4 h-4 rounded text-lime-400 focus:ring-0"
+                  />
+                  <span className="font-bold text-lime-300">Verified Partner Host (Pro Host KYC)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input 
+                    type="checkbox"
+                    checked={userEditForm.isAdmin}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, isAdmin: e.target.checked }))}
+                    className="w-4 h-4 rounded text-pink-500 focus:ring-0"
+                  />
+                  <span className="font-bold text-pink-300">Platform Admin Privileges</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs pt-1 border-t border-slate-800">
+                  <input 
+                    type="checkbox"
+                    checked={userEditForm.isBanned}
+                    onChange={(e) => setUserEditForm(prev => ({ ...prev, isBanned: e.target.checked }))}
+                    className="w-4 h-4 rounded text-red-500 focus:ring-0"
+                  />
+                  <span className="font-bold text-red-400">Account Banned / Suspended</span>
+                </label>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-black shadow-lg shadow-pink-900/30 flex items-center justify-center gap-1.5"
+                >
+                  <Save size={14} />
+                  <span>Save User Changes</span>
                 </button>
               </div>
             </form>

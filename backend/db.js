@@ -42,14 +42,18 @@ function getDefaultData() {
     withdrawalRequests: [],
     adminSettings: { 
       qrCodeUrl: '/logo.jpg',
-      whatsappNumber: '+91 9876543210',
+      whatsappNumber1: '+91 9876543211',
+      whatsappNumber2: '+91 9876543212',
+      whatsappNumber3: '+91 9876543213',
+      whatsappNumber: '+91 9876543211',
       supportEmail: 'support@ajnabidil.com',
-      supportHours: '24x7 Live Customer Care',
-      helpText: 'Official 24x7 Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
+      supportHours: '8:00 AM – 10:00 PM (Daily)',
+      helpText: 'Official Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
     },
     stories: [],
     posts: [],
-    sessions: []
+    sessions: [],
+    callLogs: []
   };
 }
 
@@ -73,7 +77,9 @@ function normalizeUser(u) {
     phoneOtp: u.phoneOtp || null,
     phoneOtpExpires: u.phoneOtpExpires || null,
     coins: u.coins !== undefined ? u.coins : 100,
-    callRate: u.callRate !== undefined ? u.callRate : 10,
+    callRate: u.callRate !== undefined ? Number(u.callRate) : 5,
+    voiceCallRate: u.voiceCallRate !== undefined ? Number(u.voiceCallRate) : 5,
+    videoCallRate: u.videoCallRate !== undefined ? Number(u.videoCallRate) : 8,
     isPartner: u.isPartner !== undefined ? u.isPartner : false,
     partnerId: u.partnerId !== undefined ? u.partnerId : null,
     earnings: u.earnings !== undefined ? u.earnings : 0,
@@ -83,16 +89,20 @@ function normalizeUser(u) {
     referralCodeUsed: u.referralCodeUsed || null,
     verificationStatus: u.verificationStatus || 'none',
     verificationDetails: u.verificationDetails || null,
-    flowers: u.flowers !== undefined ? u.flowers : 54,
-    followersCount: u.followersCount !== undefined ? u.followersCount : 89,
-    friendsCount: u.friendsCount !== undefined ? u.friendsCount : 1,
-    sessionsCount: u.sessionsCount !== undefined ? u.sessionsCount : 24,
-    rating: u.rating !== undefined ? u.rating : 4.9,
-    goalHours: u.goalHours !== undefined ? u.goalHours : 20,
-    completedGoalHours: u.completedGoalHours !== undefined ? u.completedGoalHours : 14.5,
+    flowers: u.flowers !== undefined ? Number(u.flowers) : 0,
+    followersCount: u.followersCount !== undefined ? Number(u.followersCount) : 0,
+    friendsCount: u.friendsCount !== undefined ? Number(u.friendsCount) : 0,
+    sessionsCount: u.sessionsCount !== undefined ? Number(u.sessionsCount) : 0,
+    rating: u.rating !== undefined ? Number(u.rating) : 0,
+    goalHours: u.goalHours !== undefined ? Number(u.goalHours) : 0,
+    completedGoalHours: u.completedGoalHours !== undefined ? Number(u.completedGoalHours) : 0,
     incomingCallsEnabled: u.incomingCallsEnabled !== undefined ? u.incomingCallsEnabled : true,
     friendsOnly: u.friendsOnly !== undefined ? u.friendsOnly : false,
     isBanned: u.isBanned !== undefined ? u.isBanned : false,
+    warningsCount: Number(u.warningsCount) || 0,
+    isSuspended: Boolean(u.isSuspended),
+    suspensionReason: u.suspensionReason || null,
+    warningHistory: Array.isArray(u.warningHistory) ? u.warningHistory : [],
     coverPhoto: u.coverPhoto || '/theme-bg.jpg'
   };
 }
@@ -122,7 +132,8 @@ function initDb() {
         adminSettings: parsed.adminSettings || getDefaultData().adminSettings,
         stories: Array.isArray(parsed.stories) ? parsed.stories : [],
         posts: Array.isArray(parsed.posts) ? parsed.posts : [],
-        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : []
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+        callLogs: Array.isArray(parsed.callLogs) ? parsed.callLogs : []
       };
 
       // Ensure Admin exists
@@ -217,13 +228,148 @@ const db = {
     scheduleDiskFlush();
     return normalized;
   },
+
+  isUserSuspended: (userId) => {
+    const user = memoryDb.users.find(u => u.id === userId);
+    return Boolean(user && user.isSuspended);
+  },
+
+  addWarningToUser: (userId, violationType, snippet) => {
+    const user = memoryDb.users.find(u => u.id === userId);
+    if (!user) return { warningsCount: 1, isSuspended: false, warningNumber: 1, message: 'Policy Warning' };
+
+    user.warningsCount = (Number(user.warningsCount) || 0) + 1;
+    if (!user.warningHistory) user.warningHistory = [];
+
+    const warningEntry = {
+      id: 'warn_' + Date.now(),
+      warningNumber: user.warningsCount,
+      violationType: violationType || 'CONTACT_LEAK',
+      snippet: snippet || '',
+      timestamp: new Date().toISOString()
+    };
+    user.warningHistory.push(warningEntry);
+
+    let isSuspended = false;
+    let message = '';
+
+    if (user.warningsCount === 1) {
+      message = '⚠️ Warning 1/3: Instagram, Facebook ya Phone number share karna sakht mana hai. Policy violation!';
+    } else if (user.warningsCount === 2) {
+      message = '🚨 Final Warning 2/3: Dobara personal contact dene ki koshish ki toh account PERMANENT BAN ho jayega!';
+    } else {
+      user.isSuspended = true;
+      user.suspensionReason = 'Community Guidelines: Sharing personal contact or social accounts after 3 warnings.';
+      isSuspended = true;
+      message = '🚫 ACCOUNT SUSPENDED (3/3): 3 warnings poori hone par aapka account suspend kar diya gaya hai.';
+    }
+
+    db.saveUser(user);
+    return {
+      warningsCount: user.warningsCount,
+      warningNumber: Math.min(3, user.warningsCount),
+      isSuspended: user.isSuspended,
+      message,
+      snippet: snippet || '',
+      suspensionReason: user.suspensionReason
+    };
+  },
   
   getRooms: () => memoryDb.rooms,
+
+  getRoomById: (roomId) => {
+    return memoryDb.rooms.find(r => r.id === roomId) || null;
+  },
   
   saveRoom: (room) => {
-    memoryDb.rooms.push(room);
+    const normalized = {
+      ...room,
+      isPrivate: Boolean(room.isPrivate),
+      entryCode: room.entryCode ? String(room.entryCode).trim() : null,
+      entryFee: Number(room.entryFee) || 0,
+      unlockedUsers: Array.isArray(room.unlockedUsers) ? room.unlockedUsers : (room.creatorId ? [room.creatorId] : [])
+    };
+    const idx = memoryDb.rooms.findIndex(r => r.id === room.id);
+    if (idx !== -1) {
+      memoryDb.rooms[idx] = normalized;
+    } else {
+      memoryDb.rooms.push(normalized);
+    }
     scheduleDiskFlush();
-    return room;
+    return normalized;
+  },
+
+  unlockRoom: (roomId, userId, code) => {
+    const room = memoryDb.rooms.find(r => r.id === roomId);
+    if (!room) return { success: false, error: 'Room not found' };
+
+    const user = memoryDb.users.find(u => u.id === userId);
+    if (!user) return { success: false, error: 'User not found' };
+
+    // If public room, creator, or already unlocked
+    if (!room.isPrivate || room.creatorId === userId || (room.unlockedUsers && room.unlockedUsers.includes(userId))) {
+      return { success: true, room, alreadyUnlocked: true, remainingCoins: user.coins || 0 };
+    }
+
+    // Verify code if set
+    if (room.entryCode) {
+      if (!code || String(code).trim().toLowerCase() !== String(room.entryCode).trim().toLowerCase()) {
+        return { success: false, error: 'INVALID_CODE', message: 'Galat Secret Room Code! Kripya sahi code dalein.' };
+      }
+    }
+
+    // Verify coin entry fee if set
+    const fee = Number(room.entryFee) || 0;
+    if (fee > 0) {
+      if ((user.coins || 0) < fee) {
+        return { 
+          success: false, 
+          error: 'INSUFFICIENT_COINS', 
+          requiredCoins: fee, 
+          userCoins: user.coins || 0,
+          message: `Is private room me enter hone ke liye ${fee} Coins chahiye. Aapke paas sirf ${user.coins || 0} Coins hain.`
+        };
+      }
+
+      // Deduct coins
+      user.coins = Math.max(0, (user.coins || 0) - fee);
+      db.saveUser(user);
+
+      // Credit 70% to creator
+      if (room.creatorId) {
+        const creator = memoryDb.users.find(u => u.id === room.creatorId);
+        if (creator) {
+          const earned = Math.round(fee * 0.7);
+          creator.earnings = (creator.earnings || 0) + earned;
+          db.saveUser(creator);
+        }
+      }
+    }
+
+    // Add to unlocked list
+    if (!room.unlockedUsers) room.unlockedUsers = [];
+    if (!room.unlockedUsers.includes(userId)) {
+      room.unlockedUsers.push(userId);
+      scheduleDiskFlush();
+    }
+
+    return { 
+      success: true, 
+      room, 
+      coinsDeducted: fee, 
+      remainingCoins: user.coins 
+    };
+  },
+
+  deleteRoom: (roomId) => {
+    const idx = memoryDb.rooms.findIndex(r => r.id === roomId);
+    if (idx !== -1) {
+      memoryDb.rooms.splice(idx, 1);
+      memoryDb.roomMessages = memoryDb.roomMessages.filter(m => m.roomId !== roomId);
+      scheduleDiskFlush();
+      return true;
+    }
+    return false;
   },
   
   getRoomMessages: (roomId) => {
@@ -422,6 +568,93 @@ const db = {
         isPartner: u.isPartner,
         coinsContributed: Math.floor((u.coins || 100) * 0.1)
       }));
+  },
+
+  // --- CALL LOGS & UNIFIED INBOX METHODS ---
+  saveCallLog: (call) => {
+    const log = {
+      id: call.id || 'call_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      callerId: call.callerId,
+      callerName: call.callerName || 'User',
+      callerAvatar: call.callerAvatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=caller',
+      receiverId: call.receiverId,
+      receiverName: call.receiverName || 'User',
+      receiverAvatar: call.receiverAvatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=receiver',
+      type: call.type || 'video', // 'video', 'audio', 'stranger'
+      status: call.status || 'completed', // 'completed', 'missed', 'declined'
+      durationSeconds: Number(call.durationSeconds) || 0,
+      timestamp: call.timestamp || new Date().toISOString()
+    };
+
+    if (!Array.isArray(memoryDb.callLogs)) {
+      memoryDb.callLogs = [];
+    }
+    memoryDb.callLogs.unshift(log);
+    if (memoryDb.callLogs.length > 2000) {
+      memoryDb.callLogs = memoryDb.callLogs.slice(0, 2000);
+    }
+    scheduleDiskFlush();
+    return log;
+  },
+
+  getUserCallLogs: (userId) => {
+    if (!Array.isArray(memoryDb.callLogs)) {
+      memoryDb.callLogs = [];
+    }
+    return memoryDb.callLogs.filter(c => c.callerId === userId || c.receiverId === userId);
+  },
+
+  getUserConversations: (userId) => {
+    const convoMap = new Map();
+    const userMsgs = memoryDb.messages.filter(m => m.senderId === userId || m.receiverId === userId);
+
+    userMsgs.forEach(m => {
+      const otherId = m.senderId === userId ? m.receiverId : m.senderId;
+      if (!otherId) return;
+
+      const existing = convoMap.get(otherId);
+      const isUnread = m.receiverId === userId && !m.read;
+
+      if (!existing || new Date(m.timestamp) > new Date(existing.lastTimestamp)) {
+        convoMap.set(otherId, {
+          otherUserId: otherId,
+          lastMessage: m.content || (m.mediaType === 'image' ? '📷 Photo' : '💬 Attachment'),
+          lastTimestamp: m.timestamp,
+          lastSenderId: m.senderId,
+          unreadCount: (existing ? existing.unreadCount : 0) + (isUnread ? 1 : 0)
+        });
+      } else if (isUnread) {
+        existing.unreadCount = (existing.unreadCount || 0) + 1;
+      }
+    });
+
+    // Populate user profile info
+    const conversations = [];
+    convoMap.forEach(conv => {
+      const otherUser = memoryDb.users.find(u => u.id === conv.otherUserId);
+      conversations.push({
+        ...conv,
+        otherUsername: otherUser ? otherUser.username : 'User',
+        otherAvatar: otherUser ? otherUser.avatar : 'https://api.dicebear.com/7.x/adventurer/svg?seed=' + conv.otherUserId,
+        isOnline: Boolean(otherUser && otherUser.isOnline)
+      });
+    });
+
+    return conversations.sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+  },
+
+  getActivitySummary: (userId) => {
+    const calls = (memoryDb.callLogs || []).filter(c => c.callerId === userId || c.receiverId === userId);
+    const conversations = db.getUserConversations(userId);
+    const missedCount = calls.filter(c => c.receiverId === userId && c.status === 'missed').length;
+    const totalUnreadMessages = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
+    return {
+      calls,
+      conversations,
+      missedCount,
+      totalUnreadMessages
+    };
   }
 };
 

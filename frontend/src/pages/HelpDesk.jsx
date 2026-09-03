@@ -32,25 +32,33 @@ const FAQ_ITEMS = [
 
 export default function HelpDesk() {
   const [supportInfo, setSupportInfo] = useState({
-    whatsappNumber: '+91 9876543210',
+    whatsappNumber1: '+91 9876543211',
+    whatsappNumber2: '+91 9876543212',
+    whatsappNumber3: '+91 9876543213',
+    whatsappNumber: '+91 9876543211',
     supportEmail: 'support@ajnabidil.com',
-    supportHours: '24x7 Live Customer Care',
+    supportHours: '8:00 AM – 10:00 PM (Daily)',
     helpText: 'Official Help Desk for Coin Recharges, Host KYC Verification & Payout Assistance.'
   });
   
   const [loading, setLoading] = useState(true);
-  const [copiedNumber, setCopiedNumber] = useState(false);
-  const [copiedEmail, setCopiedEmail] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
   const [openFaq, setOpenFaq] = useState(0);
   const [ticketTopic, setTicketTopic] = useState('Recharge / Coin Issue');
   const [ticketMsg, setTicketMsg] = useState('');
+
+  // Check if current time is within 8:00 AM to 10:00 PM
+  const isOnline = (() => {
+    const currentHour = new Date().getHours();
+    return currentHour >= 8 && currentHour < 22;
+  })();
 
   useEffect(() => {
     const fetchSupport = async () => {
       try {
         const data = await apiRequest('/api/support/info');
         if (data) {
-          setSupportInfo(data);
+          setSupportInfo(prev => ({ ...prev, ...data }));
         }
       } catch (err) {
         console.warn('Using default support details:', err);
@@ -62,87 +70,156 @@ export default function HelpDesk() {
     fetchSupport();
   }, []);
 
-  const cleanPhone = (supportInfo.whatsappNumber || '').replace(/[^0-9]/g, '');
-
-  const handleOpenWhatsApp = (customText) => {
-    const defaultMsg = customText || `Hello Ajnabi Dil Support Desk, I need help with: ${ticketTopic}. ${ticketMsg ? `Details: ${ticketMsg}` : ''}`;
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(defaultMsg.trim())}`;
+  const handleOpenWhatsAppLine = (phoneRaw, customText) => {
+    const clean = (phoneRaw || '').replace(/[^0-9]/g, '');
+    const defaultMsg = customText || `Hello Ajnabi Dil Official Support Desk, I need help with: ${ticketTopic}. ${ticketMsg ? `Details: ${ticketMsg}` : ''}`;
+    const url = `https://wa.me/${clean}?text=${encodeURIComponent(defaultMsg.trim())}`;
     window.open(url, '_blank');
   };
 
-  const handleCopy = (text, type) => {
-    navigator.clipboard.writeText(text);
-    if (type === 'phone') {
-      setCopiedNumber(true);
-      setTimeout(() => setCopiedNumber(false), 2000);
-    } else {
-      setCopiedEmail(true);
-      setTimeout(() => setCopiedEmail(false), 2000);
+  const handleOpenWhatsApp = (customText) => {
+    let targetPhone = supportInfo.whatsappNumber1 || supportInfo.whatsappNumber || '+91 9876543211';
+    if (ticketTopic.includes('KYC') || ticketTopic.includes('Withdrawal')) {
+      targetPhone = supportInfo.whatsappNumber2 || targetPhone;
+    } else if (ticketTopic.includes('Calling') || ticketTopic.includes('Report')) {
+      targetPhone = supportInfo.whatsappNumber3 || targetPhone;
     }
+    handleOpenWhatsAppLine(targetPhone, customText);
   };
+
+  const handleCopy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const whatsappLines = [
+    {
+      id: 'line1',
+      title: 'WhatsApp Line 1 (Recharge & Payments)',
+      subtitle: 'Coin Recharges, UPI Payment Verification & Wallet Issues',
+      badge: 'VIP Support',
+      number: supportInfo.whatsappNumber1 || supportInfo.whatsappNumber || '+91 9876543211',
+      color: 'from-emerald-600 to-teal-700',
+      tagColor: 'bg-emerald-100 text-emerald-800'
+    },
+    {
+      id: 'line2',
+      title: 'WhatsApp Line 2 (Host KYC & Accounts)',
+      subtitle: 'Host Partner Program, KYC Verification & Cashout/Withdrawal',
+      badge: 'Host Desk',
+      number: supportInfo.whatsappNumber2 || '+91 9876543212',
+      color: 'from-pink-600 to-rose-700',
+      tagColor: 'bg-pink-100 text-pink-800'
+    },
+    {
+      id: 'line3',
+      title: 'WhatsApp Line 3 (Technical & Urgent Help)',
+      subtitle: 'Audio/Video Calling Issues, Room Chat & Account Help',
+      badge: 'Urgent Tech',
+      number: supportInfo.whatsappNumber3 || '+91 9876543213',
+      color: 'from-indigo-600 to-blue-700',
+      tagColor: 'bg-indigo-100 text-indigo-800'
+    }
+  ];
 
   return (
     <MobileLayout title="Help Desk & Support">
       <div className="p-4 flex flex-col gap-4 flex-1 relative min-h-0 overflow-y-auto">
         
-        {/* Banner Header */}
-        <div className="bg-gradient-to-br from-emerald-600 via-teal-700 to-indigo-800 text-white rounded-3xl p-5 shadow-lg flex flex-col gap-3 relative overflow-hidden">
+        {/* Banner Header with 8:00 AM – 10:00 PM Timings */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black text-white rounded-3xl p-5 shadow-lg flex flex-col gap-3 relative overflow-hidden border border-slate-800">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-pink-500/20 text-pink-400 border border-pink-500/30 flex items-center justify-center">
                 <Headphones size={20} />
               </div>
               <div>
-                <h3 className="font-extrabold text-sm">24x7 Official Help Desk</h3>
-                <span className="text-[10px] text-emerald-200 font-bold flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
-                  <span>{supportInfo.supportHours}</span>
+                <h3 className="font-extrabold text-sm text-white">Official Help Desk</h3>
+                <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5 mt-0.5">
+                  <Clock size={11} className="text-pink-400" />
+                  <span>Service Time: 8:00 AM – 10:00 PM (Daily)</span>
                 </span>
               </div>
             </div>
+
+            {/* Live Operational Status Indicator */}
+            <div className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 border shadow-sm ${
+              isOnline 
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+              <span>{isOnline ? 'Online' : 'Offline'}</span>
+            </div>
           </div>
 
-          <p className="text-[11px] text-emerald-100 leading-relaxed font-medium">
-            Coin Recharge, Host Verification (KYC), Withdrawal Payouts ya Technical help ke liye direct WhatsApp Support se baat karein.
+          <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
+            Coin Recharge, Host Verification (KYC), Withdrawal Payouts ya Calling issues ke liye niche diye gaye 3 WhatsApp Helpdesk numbers par message karein.
           </p>
         </div>
 
-        {/* 🟢 OFFICIAL WHATSAPP SUPPORT ACTION CARD */}
-        <div className="bg-white border-2 border-emerald-500/30 rounded-3xl p-5 shadow-sm flex flex-col gap-3.5">
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2.5">
-              {/* WhatsApp Icon */}
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-md shadow-emerald-200">
-                <MessageSquare size={24} />
-              </div>
-              <div>
-                <span className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-600">
-                  Official WhatsApp Care
-                </span>
-                <h4 className="text-base font-extrabold text-slate-800 font-mono">
-                  {supportInfo.whatsappNumber}
-                </h4>
-              </div>
-            </div>
-
-            <button
-              onClick={() => handleCopy(supportInfo.whatsappNumber, 'phone')}
-              className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all"
-              title="Copy Number"
-            >
-              {copiedNumber ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
-              <span>{copiedNumber ? 'Copied' : 'Copy'}</span>
-            </button>
+        {/* 🟢 3 DEDICATED WHATSAPP SUPPORT NUMBERS */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <MessageSquare size={14} className="text-emerald-600" />
+              <span>Choose WhatsApp Support Line (3 Numbers)</span>
+            </h4>
+            <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+              Instant Reply
+            </span>
           </div>
 
-          {/* Quick Click to WhatsApp Button */}
-          <button
-            onClick={() => handleOpenWhatsApp()}
-            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-extrabold text-xs shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 active:scale-95 transition-all"
-          >
-            <MessageSquare size={16} />
-            <span>Chat on WhatsApp Now (Instant Reply)</span>
-          </button>
+          {whatsappLines.map((line) => (
+            <div 
+              key={line.id} 
+              className="bg-white border border-slate-200/90 rounded-3xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col gap-2.5"
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-200 shrink-0">
+                    <MessageSquare size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[8px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 rounded-md ${line.tagColor}`}>
+                        {line.badge}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-extrabold text-slate-900 mt-0.5">
+                      {line.title}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      {line.subtitle}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleCopy(line.number, line.id)}
+                  className="p-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all shrink-0"
+                  title="Copy Number"
+                >
+                  {copiedKey === line.id ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                  <span>{copiedKey === line.id ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                <span className="text-xs font-black text-slate-700 font-mono tracking-wide">
+                  {line.number}
+                </span>
+                <button
+                  onClick={() => handleOpenWhatsAppLine(line.number)}
+                  className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[11px] shadow active:scale-95 transition-all flex items-center gap-1"
+                >
+                  <MessageSquare size={13} />
+                  <span>Chat on WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* ✉️ SUPPORT EMAIL & QUICK CONTACT */}
@@ -168,8 +245,8 @@ export default function HelpDesk() {
             onClick={() => handleCopy(supportInfo.supportEmail, 'email')}
             className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all"
           >
-            {copiedEmail ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
-            <span>{copiedEmail ? 'Copied' : 'Copy'}</span>
+            {copiedKey === 'email' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+            <span>{copiedKey === 'email' ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
 
