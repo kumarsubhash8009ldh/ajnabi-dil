@@ -83,6 +83,16 @@ function App() {
           } 
         />
 
+        {/* Public Download & Landing Page */}
+        <Route 
+          path="/download" 
+          element={<DownloadPage />} 
+        />
+        <Route 
+          path="/app" 
+          element={<DownloadPage />} 
+        />
+
         {/* Protected Routes */}
         <Route 
           path="/" 
